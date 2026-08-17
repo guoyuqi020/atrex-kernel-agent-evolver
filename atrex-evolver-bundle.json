@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "bundle_format": "atrex-kernel-agent-evolver-bundle-v1",
+  "entrypoint": {
+    "command": "src/main.py"
+  }
+}
+

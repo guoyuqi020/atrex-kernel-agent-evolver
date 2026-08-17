@@ -1,0 +1,69 @@
+# Evolver Bundle 设计
+
+[English](design.md) | 中文
+
+## 1. 角色与隔离
+
+Evolver 是独立版本化的 Worker 实现，不是 Optimizer Candidate 内的组件。Runtime 在 Epoch
+Checkpoint 完成后，于全新 Sandbox 中启动它。Optimizer 永远拿不到 Evolver 仓库、配置、Prompt、
+Trace、Credential 或进程状态。
+
+Runtime 物化以下 Workspace：
+
+```text
+run-<uuid>/
+├── evolution-input.json       # 只读 EvolutionInputManifestV2
+├── input/
+│   ├── parent/                # 只读完整 Optimizer 仓库
+│   └── evidence/              # 只读 EvidenceViewManifestV1 Tree
+│       ├── manifest.json      # role=evolver；只含已完成 Epoch
+│       ├── bootstrap/
+│       └── epochs/
+├── candidate/                 # Parent 的完整可写副本
+└── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
+```
+
+文件权限和外层 Worker Sandbox 才是安全边界，Prompt 指令只是纵深防御。Evolver 不获得 Runtime
+Gateway/Wiki Capability，也不能评测 GPU Kernel。
+
+## 2. 版本化行为
+
+完整 Evolver Git Commit 是行为身份。`atrex-evolver-bundle.json` 声明唯一入口；
+`atrex-evolver.json`、`prompts/` 和 `src/` 共同决定 Agent 行为。Runtime 后续可以固定并加载另一个
+Evolver Commit，但运行中的 Epoch 永远不能修改本仓库。
+
+固定 stdin Sentinel 在兼容当前 Runtime 进程传输的同时，防止部署配置静默替换版本化 Prompt。
+
+## 3. 输入与输出
+
+入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 2，并要求严格 Evidence View 使用
+匹配的 Lineage Checkpoint、`role="evolver"`、已完成的晋升 Agent Lineage 且无当前 Epoch。它把环境路径绑定到
+Manifest，拒绝 Link、越界路径和非规范 Token Budget。
+
+Evidence 结构 Prompt Fragment 由 Runtime 编写和物化；本仓库只校验其固定路径与 Manifest 绑定的
+Digest，再拼入最终 Prompt。
+
+Coding Agent 输出 EvolutionOutputV2，包含 Parent 身份、Hypothesis、Expected Effect 和准确排序的
+Changed Paths。Runtime 仍是权威方：它独立 Hash Parent 与
+Candidate，校验真实修改集合和 Bundle Policy，封存来源，再运行 Active/Challenger 评估。
+
+## 4. Token 与进程所有权
+
+Claude Backend 按唯一 Provider Message 解析 stream-json Usage，存在终态 Usage 时以其为准，并对
+未缓存输入、输出、Cache Read、Cache Write 各计一次。累计值达到 Runtime Budget 时终止子进程组；
+外层 SIGTERM/SIGINT 会转发给该进程组，Timeout 与 stdout/stderr 均受限。已完成模型请求若缺少完整
+Provider Bucket，Report 会失败关闭。
+
+Session Artifact 把最终渲染 Prompt 原样保存到 `input/prompt.md`，把捕获的 Claude
+stream-json 保存到 `provider/stdout.stream-json`，并把 Provider stderr 保存到
+`provider/stderr.log`。Runtime 与 Evolver 不对这些文件做脱敏、Event 筛选或文本
+改写；Provider 输出的 Reasoning、Tool 参数与结果、Credential 或其他敏感字段因此会原样
+保留。`events.jsonl` 只是额外的标准化 Usage 索引；`session.json` 记录终止状态以及原始
+Provider 捕获是否避免了截断。配置的 stdout/stderr 限制仍是安全上限：超限会使 Session 失败并
+标记原始流不完整，不会把截断内容静默宣称为完整。Provider 未输出的环境 Credential 不会被
+主动复制。
+
+## 5. Evolver 自进化
+
+首版按部署 Commit 固定。未来可以增加提出新 Evolver Commit 的自进化层，但必须使用与 Optimizer
+不同的评测和晋升策略；未晋升 Evolver 不能原地改写自身，也不能改变可信 Runtime 边界。

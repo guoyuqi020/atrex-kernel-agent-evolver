@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "agent_backend": "claude",
+  "agent_executable": "claude",
+  "model": "",
+  "reasoning_effort": "max",
+  "session_settings": "",
+  "prompt": "prompts/evolve.md",
+  "agent_timeout_seconds": 1700,
+  "max_stdout_chars": 8388608,
+  "max_stderr_chars": 8388608,
+  "max_output_manifest_bytes": 16384
+}
+
