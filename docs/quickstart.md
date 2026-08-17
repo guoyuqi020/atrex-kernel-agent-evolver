@@ -8,7 +8,7 @@ entrypoint once. For the current compatibility transport configure:
 ```json
 {
   "agent_provider": "atrex-evolver-claude",
-  "repository": "../src/atrex-kernel-agent-evolver",
+  "repository": "git@github.com:guoyuqi020/atrex-kernel-agent-evolver.git",
   "commit": "<full-evolver-commit-sha>",
   "git_executable": "/usr/bin/git",
   "fetch_timeout_seconds": 120,
@@ -25,7 +25,8 @@ entrypoint once. For the current compatibility transport configure:
 }
 ```
 
-Local repository and command-prefix paths are resolved relative to the Runtime configuration file.
+Local repository and command-prefix paths are resolved relative to the Runtime configuration file;
+production should use the separately controlled remote repository shown above.
 Runtime fetches exactly the configured full commit, rejects links/submodules and unsafe archives,
 seals the complete exported tree in its Artifact Store, validates the strict root manifest and
 Bundle limits, and appends the manifest-owned entrypoint to the command prefix. The derived content

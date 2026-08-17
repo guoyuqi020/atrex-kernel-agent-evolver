@@ -8,7 +8,7 @@ Bundle 不是独立 Campaign 工具。Runtime 创建 Workspace，并调用一次
 ```json
 {
   "agent_provider": "atrex-evolver-claude",
-  "repository": "../src/atrex-kernel-agent-evolver",
+  "repository": "git@github.com:guoyuqi020/atrex-kernel-agent-evolver.git",
   "commit": "<完整 Evolver Commit SHA>",
   "git_executable": "/usr/bin/git",
   "fetch_timeout_seconds": 120,
@@ -25,7 +25,8 @@ Bundle 不是独立 Campaign 工具。Runtime 创建 Workspace，并调用一次
 }
 ```
 
-本地 Repository 与 Command Prefix 路径以 Runtime 配置文件为基准解析。Runtime 只 Fetch 配置的完整
+本地 Repository 与 Command Prefix 路径以 Runtime 配置文件为基准解析；生产环境应使用上面展示的
+独立受控远端 Repository。Runtime 只 Fetch 配置的完整
 Commit，拒绝 Link、Submodule 与不安全 Archive，把完整导出 Tree 封存进 Artifact Store，校验严格根
 Manifest 与 Bundle 限制，再把 Manifest 持有的入口追加到 Command Prefix。派生内容 Digest 仍用于
 完整性与 Provenance，但部署身份统一为 Git Commit。Claude Credential 只能通过 Runtime 显式继承
