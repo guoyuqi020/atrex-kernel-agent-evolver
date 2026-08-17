@@ -29,9 +29,10 @@ Runtime Gateway/Wiki Capability，也不能评测 GPU Kernel。OS Sandbox 明确
 
 ## 2. 版本化行为
 
-完整 Evolver Bundle 的规范 SHA-256 是行为身份。`atrex-evolver-bundle.json` 声明唯一入口；所有未
-忽略的普通文件共同决定 Digest 与 Agent 行为。Runtime 在启动前拒绝 Link、特殊文件、超限或 Digest
-不匹配。部署后续可以固定另一个 Bundle Snapshot，但运行中的 Epoch 永远不能修改本仓库。
+完整 Git Commit 是部署行为身份，与 Optimizer Base 约定一致。Runtime 只 Fetch 该 Commit，校验 Git
+Tree，安全导出并在启动前把整个 Snapshot 封存进内容寻址存储。`atrex-evolver-bundle.json` 声明唯一
+入口；Runtime 还会派生整树内容 Digest 用于完整性与 Provenance。Link、Submodule、特殊文件、不安全
+Archive 或超限都会被拒绝。部署后续可以固定另一个 Commit，但运行中的 Epoch 永远不能修改本仓库。
 
 固定 stdin Sentinel 在兼容当前 Runtime 进程传输的同时，防止部署配置静默替换版本化 Prompt。
 
@@ -66,5 +67,5 @@ Provider 捕获是否避免了截断。配置的 stdout/stderr 限制仍是安�
 
 ## 5. Evolver 自进化
 
-首版按部署内容 Digest 固定。未来可以增加提出新 Evolver Bundle Digest 的自进化层，但必须使用与 Optimizer
+首版按部署 Git Commit 固定。未来可以增加提出新 Evolver Commit 的自进化层，但必须使用与 Optimizer
 不同的评测和晋升策略；未晋升 Evolver 不能原地改写自身，也不能改变可信 Runtime 边界。

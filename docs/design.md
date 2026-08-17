@@ -30,11 +30,12 @@ code as contained.
 
 ## 2. Versioned behavior
 
-The canonical SHA-256 of the complete Evolver Bundle is the behavior identity.
-`atrex-evolver-bundle.json` declares its single entrypoint; all non-ignored regular files determine
-the digest and Agent behavior. Runtime rejects links, special files, limit overflow, or a digest
-mismatch before launch. A deployment may pin a different Bundle snapshot later, but one running
-Epoch never mutates this repository.
+The full Git commit is the deployment behavior identity, matching the Optimizer Base convention.
+Runtime fetches exactly that commit, validates the Git tree, safely exports it, and seals the whole
+snapshot into content-addressed storage before launch. `atrex-evolver-bundle.json` declares the
+single entrypoint; Runtime additionally derives a complete-tree content digest for integrity and
+provenance. Links, submodules, special files, unsafe archives, or limit overflow are rejected. A
+deployment may pin a different commit later, but one running Epoch never mutates this repository.
 
 The fixed stdin sentinel prevents deployment configuration from silently replacing the versioned
 Prompt while retaining compatibility with Runtime's current process transport.
@@ -74,6 +75,6 @@ credentials are not proactively copied when the Provider did not emit them.
 
 ## 5. Evolution of the Evolver
 
-This first repository is fixed per deployment content digest. A future self-evolution layer may
-propose a new Evolver Bundle digest, but it must use a separate evaluation and promotion policy from Optimizer evolution.
+This first repository is fixed per deployment Git commit. A future self-evolution layer may propose
+a new Evolver commit, but it must use a separate evaluation and promotion policy from Optimizer evolution.
 It must never let an unpromoted Evolver rewrite itself in place or change the trusted Runtime boundary.
