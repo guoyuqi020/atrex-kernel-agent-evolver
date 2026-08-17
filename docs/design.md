@@ -5,7 +5,7 @@ English | [中文](design.zh.md)
 ## 1. Role and isolation
 
 The Evolver is a separately versioned worker implementation, not a component inside the Optimizer
-Candidate. Runtime launches it in a fresh sandbox after an Epoch checkpoint exists. The Optimizer
+Candidate. Runtime launches it in a fresh workspace and process after an Epoch checkpoint exists. The Optimizer
 never receives the Evolver repository, configuration, Prompt, trace, credentials, or process state.
 
 Runtime materializes this workspace:
@@ -23,15 +23,18 @@ run-<uuid>/
 └── scratch/                   # writable report, trace, and isolated Agent state
 ```
 
-Filesystem permissions and the outer Worker sandbox are the security boundary. Prompt instructions
+Runtime path validation and process capabilities are the current trust boundary; Prompt instructions
 are defense in depth. The Evolver receives no Runtime Gateway/Wiki capability and must not evaluate
-GPU Kernels.
+GPU Kernels. OS sandboxing is intentionally deferred and must be added before treating hostile Agent
+code as contained.
 
 ## 2. Versioned behavior
 
-The complete Evolver Git commit is the behavior identity. `atrex-evolver-bundle.json` declares its
-single entrypoint; `atrex-evolver.json`, `prompts/`, and `src/` determine Agent behavior. Runtime may
-pin and load a different Evolver commit later, but one running Epoch never mutates this repository.
+The canonical SHA-256 of the complete Evolver Bundle is the behavior identity.
+`atrex-evolver-bundle.json` declares its single entrypoint; all non-ignored regular files determine
+the digest and Agent behavior. Runtime rejects links, special files, limit overflow, or a digest
+mismatch before launch. A deployment may pin a different Bundle snapshot later, but one running
+Epoch never mutates this repository.
 
 The fixed stdin sentinel prevents deployment configuration from silently replacing the versioned
 Prompt while retaining compatibility with Runtime's current process transport.
@@ -71,6 +74,6 @@ credentials are not proactively copied when the Provider did not emit them.
 
 ## 5. Evolution of the Evolver
 
-This first repository is fixed per deployment commit. A future self-evolution layer may propose a new
-Evolver commit, but it must use a separate evaluation and promotion policy from Optimizer evolution.
+This first repository is fixed per deployment content digest. A future self-evolution layer may
+propose a new Evolver Bundle digest, but it must use a separate evaluation and promotion policy from Optimizer evolution.
 It must never let an unpromoted Evolver rewrite itself in place or change the trusted Runtime boundary.

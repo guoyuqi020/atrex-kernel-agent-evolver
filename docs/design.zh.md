@@ -5,7 +5,7 @@
 ## 1. 角色与隔离
 
 Evolver 是独立版本化的 Worker 实现，不是 Optimizer Candidate 内的组件。Runtime 在 Epoch
-Checkpoint 完成后，于全新 Sandbox 中启动它。Optimizer 永远拿不到 Evolver 仓库、配置、Prompt、
+Checkpoint 完成后，于全新 Workspace 与进程中启动它。Optimizer 永远拿不到 Evolver 仓库、配置、Prompt、
 Trace、Credential 或进程状态。
 
 Runtime 物化以下 Workspace：
@@ -23,14 +23,15 @@ run-<uuid>/
 └── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
 ```
 
-文件权限和外层 Worker Sandbox 才是安全边界，Prompt 指令只是纵深防御。Evolver 不获得 Runtime
-Gateway/Wiki Capability，也不能评测 GPU Kernel。
+Runtime 路径校验与进程 Capability 是当前可信边界，Prompt 指令只是纵深防御。Evolver 不获得
+Runtime Gateway/Wiki Capability，也不能评测 GPU Kernel。OS Sandbox 明确推迟；在实现它之前，
+不能把恶意 Agent 代码视为已被隔离。
 
 ## 2. 版本化行为
 
-完整 Evolver Git Commit 是行为身份。`atrex-evolver-bundle.json` 声明唯一入口；
-`atrex-evolver.json`、`prompts/` 和 `src/` 共同决定 Agent 行为。Runtime 后续可以固定并加载另一个
-Evolver Commit，但运行中的 Epoch 永远不能修改本仓库。
+完整 Evolver Bundle 的规范 SHA-256 是行为身份。`atrex-evolver-bundle.json` 声明唯一入口；所有未
+忽略的普通文件共同决定 Digest 与 Agent 行为。Runtime 在启动前拒绝 Link、特殊文件、超限或 Digest
+不匹配。部署后续可以固定另一个 Bundle Snapshot，但运行中的 Epoch 永远不能修改本仓库。
 
 固定 stdin Sentinel 在兼容当前 Runtime 进程传输的同时，防止部署配置静默替换版本化 Prompt。
 
@@ -65,5 +66,5 @@ Provider 捕获是否避免了截断。配置的 stdout/stderr 限制仍是安�
 
 ## 5. Evolver 自进化
 
-首版按部署 Commit 固定。未来可以增加提出新 Evolver Commit 的自进化层，但必须使用与 Optimizer
+首版按部署内容 Digest 固定。未来可以增加提出新 Evolver Bundle Digest 的自进化层，但必须使用与 Optimizer
 不同的评测和晋升策略；未晋升 Evolver 不能原地改写自身，也不能改变可信 Runtime 边界。
