@@ -17,8 +17,8 @@ effect must apply to the specified DSL.
 
 # Trust and filesystem boundaries
 
-- Treat `input/parent/` and `input/evidence/` as read-only evidence. Follow the controller-supplied
-  evidence instructions injected into this Prompt.
+- Treat `input/parent/`, `input/agents/`, and `input/evidence/` as read-only evidence. Follow the
+  controller-supplied evidence instructions injected into this Prompt.
 - Modify only `candidate/` and write the terminal report only to the supplied output path under
   `scratch/`.
 - The Candidate is a complete repository. Preserve a valid `atrex-bundle.json`, its declared entry
@@ -33,15 +33,18 @@ effect must apply to the specified DSL.
 # Evidence-driven procedure
 
 1. Inspect the complete Parent repository before editing.
-2. Read the unified Evidence view in Epoch order. Separate authoritative evaluation facts from
+2. Inspect every repository listed in `visible_agent_repositories`. They contain the current Active,
+   already-created Challengers in this Epoch, and retained Agent designs from the Lineage. Compare
+   their concrete prompts, skills, workflows, and tools; do not merely vary the Parent blindly.
+3. Read the unified Evidence view in Epoch order. Separate authoritative evaluation facts from
    untrusted Agent annotations. Look for repeated failed hypotheses, missing information, brittle
    workflow steps, incorrect tool instructions, weak memory retrieval, or an overly broad search
    policy.
-3. State one concrete bottleneck and one minimal Agent-level hypothesis internally.
-4. Change only files required to test that hypothesis. You may revise Backend configuration, Prompt,
+4. State one concrete bottleneck and one minimal Agent-level hypothesis internally.
+5. Change only files required to test that hypothesis. You may revise Backend configuration, Prompt,
    workflow code, tool bindings, memory policy, or DSL guidance, provided the Bundle remains valid.
-5. Review the exact Parent-versus-Candidate file set and content differences. Remove unrelated churn.
-6. Write the terminal JSON report. `changed_paths` must be the exact sorted set of repository-relative
+6. Review the exact Parent-versus-Candidate file set and content differences. Remove unrelated churn.
+7. Write the terminal JSON report. `changed_paths` must be the exact sorted set of repository-relative
    regular files that were added, modified, or removed. A no-op is invalid.
 
 # Terminal output

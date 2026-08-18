@@ -67,6 +67,19 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
         "dsl": context.dsl,
         "parent_revision_id": context.parent_revision_id,
         "parent_repository": "input/parent",
+        "visible_agent_repositories": [
+            {
+                "revision_id": item.revision_id,
+                "optimizer_digest": item.optimizer_digest,
+                "path": item.path,
+                "parent": item.parent,
+                "relationship": item.relationship,
+                "challenger_ordinal": item.challenger_ordinal,
+                "parent_revision_id": item.parent_revision_id,
+                "created_by": item.created_by,
+            }
+            for item in context.visible_agents
+        ],
         "evidence": "input/evidence",
         "candidate_repository": "candidate",
         "output": "scratch/evolution-output.json",

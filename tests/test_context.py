@@ -17,7 +17,13 @@ EVIDENCE_PROMPT_SHA256 = hashlib.sha256(EVIDENCE_PROMPT.encode()).hexdigest()
 
 def _environment(tmp_path: Path) -> dict[str, str]:
     workspace = tmp_path / "run"
-    for relative in ("input/parent", "input/evidence", "candidate", "scratch"):
+    for relative in (
+        "input/parent",
+        f"input/agents/{REVISION}",
+        "input/evidence",
+        "candidate",
+        "scratch",
+    ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
     (workspace / "input/evidence/bootstrap").mkdir()
     (workspace / "input/evidence/epochs").mkdir()
@@ -43,14 +49,27 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         encoding="utf-8",
     )
     manifest = {
-        "schema_version": 2,
+        "schema_version": 3,
         "parent_revision_id": REVISION,
         "evidence_checkpoint": DIGEST,
         "idempotency_key": "epoch:test:challenger",
         "dsl": "triton",
         "optimizer_digest": DIGEST,
+        "visible_agents": [
+            {
+                "revision_id": REVISION,
+                "optimizer_digest": DIGEST,
+                "path": f"input/agents/{REVISION}",
+                "parent": True,
+                "relationship": "active",
+                "challenger_ordinal": None,
+                "parent_revision_id": None,
+                "created_by": "bootstrap",
+            }
+        ],
         "paths": {
             "parent": "input/parent",
+            "agents": "input/agents",
             "evidence": "input/evidence",
             "candidate": "candidate",
             "scratch": "scratch",

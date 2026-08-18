@@ -7,21 +7,25 @@ Bundle 不是独立 Campaign 工具。Runtime 创建 Workspace，并调用一次
 
 ```json
 {
-  "agent_provider": "atrex-evolver-claude",
   "repository": "git@github.com:guoyuqi020/atrex-kernel-agent-evolver.git",
   "commit": "<完整 Evolver Commit SHA>",
   "git_executable": "/usr/bin/git",
   "fetch_timeout_seconds": 120,
   "max_archive_bytes": 16777216,
-  "command_prefix": ["../.venv/bin/python"],
+  "command_prefix": [".venv/bin/python"],
   "max_bundle_files": 1024,
   "max_bundle_bytes": 8388608,
-  "model": "claude-default",
-  "prompt": "Run the versioned Evolver Bundle once.",
-  "prompt_transport": "stdin",
+  "environment": {
+    "values": {},
+    "inherit": ["PATH", "ANTHROPIC_AUTH_TOKEN"]
+  },
   "isolated_home_environment_keys": ["HOME"],
   "session_trace_relative_path": "scratch/evolver-session",
-  "token_usage_report_relative_path": "scratch/token-usage.json"
+  "token_usage_report_relative_path": "scratch/token-usage.json",
+  "timeout_seconds": 1800,
+  "terminate_grace_seconds": 10,
+  "max_diagnostic_bytes": 131072,
+  "max_output_manifest_bytes": 16384
 }
 ```
 
@@ -33,6 +37,7 @@ Manifest 与 Bundle 限制，再把 Manifest 持有的入口追加到 Command Pr
 环境白名单传递。外层 Worker Timeout 必须大于 `atrex-evolver.json` 的
 `agent_timeout_seconds`，使 Bundle 有机会先回收子进程。
 
+Runtime JSON 刻意不提供 Provider、Model 和版本化 Prompt 配置，这些内容由 Evolver 仓库持有。
 缺少准确 Runtime Manifest、路径、Usage Report 目标或 Sentinel 时直接调用 `src/main.py` 必须失败关闭。
 
 每次 Agent Session 启动后，`scratch/evolver-session/` 会在 `input/` 下保存未脱敏的最终

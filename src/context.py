@@ -20,6 +20,21 @@ _REVISION_ID = re.compile(r"^agentrev_[0-9a-f]{32}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
+@dataclass(frozen=True)
+class VisibleAgent:
+    """One Runtime-validated read-only Optimizer design."""
+
+    revision_id: str
+    optimizer_digest: str
+    path: str
+    root: Path
+    parent: bool
+    relationship: str
+    challenger_ordinal: int | None
+    parent_revision_id: str | None
+    created_by: str
+
+
 def _object(value: object, label: str) -> dict[str, Any]:
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ValueError(f"{label} must be a JSON object")
@@ -97,6 +112,7 @@ class EvolutionContext:
     workspace: Path
     manifest_path: Path
     parent_root: Path
+    visible_agents: tuple[VisibleAgent, ...]
     evidence_root: Path
     candidate_root: Path
     scratch_root: Path
@@ -131,6 +147,7 @@ class EvolutionContext:
             "idempotency_key",
             "dsl",
             "optimizer_digest",
+            "visible_agents",
             "paths",
         }
         if set(manifest) != expected_fields:
@@ -138,7 +155,7 @@ class EvolutionContext:
                 "Evolution input fields disagree with schema: "
                 f"{sorted(set(manifest) ^ expected_fields)}"
             )
-        if manifest["schema_version"] != 2:
+        if manifest["schema_version"] != 3:
             raise ValueError("unsupported Evolution input schema_version")
         parent_revision_id = _text(manifest["parent_revision_id"], "parent_revision_id")
         if _REVISION_ID.fullmatch(parent_revision_id) is None:
@@ -156,18 +173,118 @@ class EvolutionContext:
         paths = _object(manifest["paths"], "Evolution paths")
         expected_paths = {
             "parent": "input/parent",
+            "agents": "input/agents",
             "evidence": "input/evidence",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-output.json",
         }
         if paths != expected_paths:
-            raise ValueError("Evolution paths disagree with protocol v2")
+            raise ValueError("Evolution paths disagree with protocol v3")
 
         parent_root = _real_directory(
             _expected_path(workspace, expected_paths["parent"], "parent path"),
             "Parent repository",
         )
+        agents_root = _real_directory(
+            _expected_path(workspace, expected_paths["agents"], "agents path"),
+            "Visible Agent repositories",
+        )
+        raw_visible_agents = manifest["visible_agents"]
+        if (
+            not isinstance(raw_visible_agents, list)
+            or not raw_visible_agents
+            or len(raw_visible_agents) > 512
+        ):
+            raise ValueError("visible_agents must be a non-empty bounded list")
+        visible_agents: list[VisibleAgent] = []
+        seen_revisions: set[str] = set()
+        for index, raw_visible in enumerate(raw_visible_agents):
+            visible = _object(raw_visible, f"visible_agents[{index}]")
+            if set(visible) != {
+                "revision_id",
+                "optimizer_digest",
+                "path",
+                "parent",
+                "relationship",
+                "challenger_ordinal",
+                "parent_revision_id",
+                "created_by",
+            }:
+                raise ValueError("visible Agent fields disagree with protocol v3")
+            revision_id = _text(visible["revision_id"], "visible Agent revision_id")
+            digest = _text(visible["optimizer_digest"], "visible Agent optimizer_digest")
+            relative = _text(visible["path"], "visible Agent path")
+            parent = visible["parent"]
+            relationship = _text(
+                visible["relationship"],
+                "visible Agent relationship",
+                max_length=64,
+            )
+            challenger_ordinal = visible["challenger_ordinal"]
+            visible_parent_revision_id = visible["parent_revision_id"]
+            created_by = _text(
+                visible["created_by"],
+                "visible Agent created_by",
+                max_length=200,
+            )
+            if (
+                _REVISION_ID.fullmatch(revision_id) is None
+                or _DIGEST.fullmatch(digest) is None
+                or relative != f"input/agents/{revision_id}"
+                or not isinstance(parent, bool)
+                or relationship
+                not in {"active", "current_epoch_challenger", "lineage_history"}
+                or parent != (relationship == "active")
+                or (
+                    relationship == "current_epoch_challenger"
+                    and (
+                        not isinstance(challenger_ordinal, int)
+                        or isinstance(challenger_ordinal, bool)
+                        or challenger_ordinal <= 0
+                    )
+                )
+                or (
+                    relationship != "current_epoch_challenger"
+                    and challenger_ordinal is not None
+                )
+                or (
+                    visible_parent_revision_id is not None
+                    and (
+                        not isinstance(visible_parent_revision_id, str)
+                        or _REVISION_ID.fullmatch(visible_parent_revision_id) is None
+                    )
+                )
+                or revision_id in seen_revisions
+            ):
+                raise ValueError("visible Agent entry is invalid")
+            root = _real_directory(
+                _expected_path(workspace, relative, "visible Agent path"),
+                f"Visible Agent {revision_id}",
+            )
+            visible_agents.append(
+                VisibleAgent(
+                    revision_id,
+                    digest,
+                    relative,
+                    root,
+                    parent,
+                    relationship,
+                    challenger_ordinal,
+                    visible_parent_revision_id,
+                    created_by,
+                )
+            )
+            seen_revisions.add(revision_id)
+        if {child.name for child in agents_root.iterdir()} != seen_revisions:
+            raise ValueError("visible Agent directories disagree with the manifest")
+        parents = [item for item in visible_agents if item.parent]
+        if (
+            len(parents) != 1
+            or parents[0].revision_id != parent_revision_id
+            or parents[0].optimizer_digest != optimizer_digest
+        ):
+            raise ValueError("visible Agent pool does not identify the exact Parent")
         evidence_root = _real_directory(
             _expected_path(workspace, expected_paths["evidence"], "evidence path"),
             "Evidence view",
@@ -259,6 +376,7 @@ class EvolutionContext:
             workspace=workspace,
             manifest_path=manifest_path,
             parent_root=parent_root,
+            visible_agents=tuple(visible_agents),
             evidence_root=evidence_root,
             candidate_root=candidate_root,
             scratch_root=scratch_root,

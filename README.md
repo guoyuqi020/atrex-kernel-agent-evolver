@@ -9,8 +9,9 @@ evaluation, scheduling, retention, or promotion authority.
 
 One invocation:
 
-1. validates `EvolutionInputManifestV2` and every Runtime-owned path;
-2. reads the complete Parent repository and one strict, Epoch-organized Evidence view;
+1. validates `EvolutionInputManifestV3` and every Runtime-owned path;
+2. reads the complete Parent repository, the read-only visible Agent revision catalog, and one
+   strict, Epoch-organized Evidence view;
 3. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
 4. permits changes only in the writable complete Candidate repository;
 5. emits an unredacted Session Artifact containing the rendered Prompt, captured raw Claude

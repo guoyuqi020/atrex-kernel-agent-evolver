@@ -12,9 +12,11 @@ Runtime materializes this workspace:
 
 ```text
 run-<uuid>/
-├── evolution-input.json       # read-only EvolutionInputManifestV2
+├── evolution-input.json       # read-only EvolutionInputManifestV3
 ├── input/
 │   ├── parent/                # read-only complete Optimizer repository
+│   ├── agents/                # read-only visible Agent revision repositories
+│   │   └── agentrev_<id>/
 │   └── evidence/              # read-only EvidenceViewManifestV1 tree
 │       ├── manifest.json      # role=evolver; completed Epochs only
 │       ├── bootstrap/
@@ -42,7 +44,11 @@ Prompt while retaining compatibility with Runtime's current process transport.
 
 ## 3. Input and output
 
-The entrypoint accepts only Evolution manifest schema 2 with the exact fixed path map. It also
+The entrypoint accepts only Evolution manifest schema 3 with the exact fixed path map. The manifest
+identifies exactly one Parent and a nonempty, duplicate-free `visible_agents` catalog. Runtime
+includes the retained Lineage Agent history plus Challengers already created earlier in the current
+Epoch; each catalog entry supplies its Parent link, creator, relationship, and current-Epoch
+Challenger ordinal when applicable, and resolves to one read-only repository under `input/agents/`. It also
 requires a strict Evidence view with the matching lineage checkpoint, `role="evolver"`, the
 completed promoted Agent lineage, and no current Epoch. It binds each environment path to that manifest and rejects
 links and path escapes. A usage-report destination is mandatory, but no token budget is accepted.
@@ -53,7 +59,7 @@ only verifies its fixed path and Manifest-bound Digest before appending it to th
 The Coding Agent writes EvolutionOutputV2 with Parent identity, hypothesis, expected effect, and an
 exact sorted changed-path declaration. Runtime remains authoritative: it independently
 hashes Parent and Candidate, verifies the actual changed set and Bundle policy, seals provenance, and
-runs Active-versus-Challenger evaluation.
+runs the configured Active-versus-Challenger-pool evaluation.
 
 ## 4. Token and process ownership
 

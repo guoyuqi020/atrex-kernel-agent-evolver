@@ -12,9 +12,11 @@ Runtime 物化以下 Workspace：
 
 ```text
 run-<uuid>/
-├── evolution-input.json       # 只读 EvolutionInputManifestV2
+├── evolution-input.json       # 只读 EvolutionInputManifestV3
 ├── input/
 │   ├── parent/                # 只读完整 Optimizer 仓库
+│   ├── agents/                # 只读可见 Agent Revision 仓库
+│   │   └── agentrev_<id>/
 │   └── evidence/              # 只读 EvidenceViewManifestV1 Tree
 │       ├── manifest.json      # role=evolver；只含已完成 Epoch
 │       ├── bootstrap/
@@ -38,7 +40,11 @@ Archive 或超限都会被拒绝。部署后续可以固定另一个 Commit，�
 
 ## 3. 输入与输出
 
-入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 2，并要求严格 Evidence View 使用
+入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 3。Manifest 必须标出恰好一个
+Parent，并提供非空、无重复的 `visible_agents` Catalog。Runtime 会加入已保留的 Lineage Agent
+历史，以及当前 Epoch 中此前已创建的 Challenger；每个条目都解析到 `input/agents/` 下一个只读
+仓库，并明确提供 Parent Link、创建者、关系类型以及适用时的当前 Epoch Challenger Ordinal。
+入口同时要求严格 Evidence View 使用
 匹配的 Lineage Checkpoint、`role="evolver"`、已完成的晋升 Agent Lineage 且无当前 Epoch。它把环境路径绑定到
 Manifest，并拒绝 Link 与越界路径。Usage Report 目标是必需输入，但不接受 Token Budget。
 
@@ -47,7 +53,8 @@ Digest，再拼入最终 Prompt。
 
 Coding Agent 输出 EvolutionOutputV2，包含 Parent 身份、Hypothesis、Expected Effect 和准确排序的
 Changed Paths。Runtime 仍是权威方：它独立 Hash Parent 与
-Candidate，校验真实修改集合和 Bundle Policy，封存来源，再运行 Active/Challenger 评估。
+Candidate，校验真实修改集合和 Bundle Policy，封存来源，再运行配置的 Active/Challenger Pool
+评估。
 
 ## 4. Token 与进程所有权
 
