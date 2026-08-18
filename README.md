@@ -20,10 +20,11 @@ One invocation:
 
 ## Current backend
 
-Version 1 implements Claude CLI stream-json execution with live provider-token accounting. It stops
-the complete Claude process group after reported cumulative usage reaches `ATREX_TOKEN_BUDGET` and
-always publishes Runtime `TokenUsageReportV1`. Codex is deliberately not claimed yet: a conforming
-Codex backend must observe its Session Ledger so it can enforce the same live token-only quota.
+Version 1 implements Claude CLI stream-json execution with live provider-token accounting. It has no
+token cutoff: provider usage remains mandatory telemetry, while process wall time and output bounds
+remain safety limits. It always publishes `TokenUsageReportV1` with a null budget. Codex is
+deliberately not claimed yet: a conforming Codex backend must observe its Session Ledger and publish
+the same complete accounting.
 
 The Coding Agent may change any valid Optimizer-owned file under `candidate/`, including its Agent
 backend configuration, Prompt, workflow, tool bindings, memory policy, and DSL guidance. It cannot
@@ -35,7 +36,7 @@ change this Evolver, Runtime, or deployment policy because those files are absen
 - `atrex-evolver.json` fixes backend behavior, Prompt, timeout, and output bounds.
 - `prompts/evolve.md` contains the evidence-driven Agent-engineering procedure.
 - Runtime supplies only `ATREX_EVOLUTION_INPUT`, `ATREX_EVOLUTION_CANDIDATE`,
-  `ATREX_EVOLUTION_OUTPUT`, `ATREX_TOKEN_BUDGET`, and `ATREX_TOKEN_USAGE_REPORT` plus explicitly
+  `ATREX_EVOLUTION_OUTPUT`, and `ATREX_TOKEN_USAGE_REPORT` plus explicitly
   allowed provider credentials and isolated-home variables.
 - Runtime stdin must contain only `Run the versioned Evolver Bundle once.`; it cannot replace the
   versioned Prompt.

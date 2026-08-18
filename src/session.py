@@ -169,7 +169,7 @@ def _write_trace(
 
 def execute(context: EvolutionContext, config: EvolverConfig) -> int:
     """Run one Agent, validate its annotation, and always publish provider usage."""
-    observer = ClaudeUsageObserver(context.token_budget)
+    observer = ClaudeUsageObserver()
     process: ProcessResult | None = None
     session_started = False
     try:
@@ -181,7 +181,6 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 "ATREX_EVOLUTION_INPUT": str(context.manifest_path),
                 "ATREX_EVOLUTION_CANDIDATE": str(context.candidate_root),
                 "ATREX_EVOLUTION_OUTPUT": str(context.output_path),
-                "ATREX_TOKEN_BUDGET": str(context.token_budget),
                 "ATREX_TOKEN_USAGE_REPORT": str(context.token_usage_path),
             }
         )
@@ -198,8 +197,6 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             stdout_observer=observer.observe,
         )
         _write_trace(context, observer, process, prompt)
-        if observer.exhausted:
-            return 125
         if process.timed_out:
             return 124
         if process.externally_terminated:

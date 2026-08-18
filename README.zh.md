@@ -19,10 +19,10 @@ Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、
 
 ## 当前 Backend
 
-版本 1 实现 Claude CLI stream-json Backend 和实时 Provider Token 计量。已报告累计用量达到
-`ATREX_TOKEN_BUDGET` 后，它会终止完整 Claude 进程组，并始终发布 Runtime
-`TokenUsageReportV1`。当前不虚假宣称支持 Codex：符合协议的 Codex Backend 必须观察 Session
-Ledger，才能实施相同的实时 Token-only 配额。
+版本 1 实现 Claude CLI stream-json Backend 和实时 Provider Token 计量，但没有 Token 截止。
+Provider Usage 仍是必需遥测，进程 Wall Time 和输出限制仍是安全边界；Bundle 始终发布 Budget
+为空的 `TokenUsageReportV1`。当前不虚假宣称支持 Codex：符合协议的 Codex Backend 必须观察
+Session Ledger 并发布同样完整的记账。
 
 Coding Agent 可以修改 `candidate/` 下任意有效的 Optimizer 文件，包括 Agent Backend 配置、
 Prompt、Workflow、Tool Binding、Memory Policy 和 DSL 指导。Evolver、Runtime 与部署策略不在
@@ -33,7 +33,7 @@ Candidate 内，或者只读，因此不能被它修改。
 - `atrex-evolver-bundle.json` 声明唯一入口 `src/main.py`；
 - `atrex-evolver.json` 固定 Backend 行为、Prompt、超时与输出上限；
 - `prompts/evolve.md` 定义 Evidence 驱动的 Agent Engineering 流程；
-- Runtime 只提供 Evolution 输入/Candidate/输出路径、Token Budget/Report 路径，以及显式允许的
+- Runtime 只提供 Evolution 输入/Candidate/输出路径、Token Report 路径，以及显式允许的
   Provider Credential 与隔离 Home；
 - Runtime stdin 必须只包含 `Run the versioned Evolver Bundle once.`，不能替换版本化 Prompt。
 

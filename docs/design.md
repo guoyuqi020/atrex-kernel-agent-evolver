@@ -44,8 +44,8 @@ Prompt while retaining compatibility with Runtime's current process transport.
 
 The entrypoint accepts only Evolution manifest schema 2 with the exact fixed path map. It also
 requires a strict Evidence view with the matching lineage checkpoint, `role="evolver"`, the
-completed promoted Agent lineage, and no current Epoch. It binds each environment path to that manifest, rejects
-links and path escapes, and accepts only canonical positive token budgets.
+completed promoted Agent lineage, and no current Epoch. It binds each environment path to that manifest and rejects
+links and path escapes. A usage-report destination is mandatory, but no token budget is accepted.
 
 The Evidence structure Prompt Fragment is authored and materialized by Runtime. This repository
 only verifies its fixed path and Manifest-bound Digest before appending it to the final Prompt.
@@ -58,10 +58,10 @@ runs Active-versus-Challenger evaluation.
 ## 4. Token and process ownership
 
 The Claude backend parses stream-json usage per unique provider message, uses the terminal usage when
-available, and counts uncached input, output, cache reads, and cache writes exactly once. It terminates
-the child process group when the cumulative total reaches the Runtime budget. Outer SIGTERM/SIGINT is
-relayed to that group; timeout and captured stdout/stderr are bounded. The report fails closed when a
-completed model request lacks complete provider buckets.
+available, and counts uncached input, output, cache reads, and cache writes exactly once. Token count
+never terminates the child. Outer SIGTERM/SIGINT is relayed to that group; timeout and captured
+stdout/stderr are bounded. The report uses a null budget and fails closed when a completed model
+request lacks complete provider buckets.
 
 The Session Artifact preserves the final rendered Prompt at `input/prompt.md`, the captured Claude
 stream-json stream at `provider/stdout.stream-json`, and captured Provider stderr at

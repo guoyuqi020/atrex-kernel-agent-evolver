@@ -33,9 +33,12 @@ Manifest 与 Bundle 限制，再把 Manifest 持有的入口追加到 Command Pr
 环境白名单传递。外层 Worker Timeout 必须大于 `atrex-evolver.json` 的
 `agent_timeout_seconds`，使 Bundle 有机会先回收子进程。
 
-缺少准确 Runtime Manifest、路径、配额或 Sentinel 时直接调用 `src/main.py` 必须失败关闭。
+缺少准确 Runtime Manifest、路径、Usage Report 目标或 Sentinel 时直接调用 `src/main.py` 必须失败关闭。
 
 每次 Agent Session 启动后，`scratch/evolver-session/` 会在 `input/` 下保存未脱敏的最终
 渲染 Prompt，在 `provider/` 下保存捕获的原始 Claude stdout/stderr，并使用
 `events.jsonl` 和 `session.json` 保存标准化计量与完整性元数据。Runtime 会把整个
 目录封存为 Session Artifact。
+
+Runtime 不提供 `ATREX_TOKEN_BUDGET`。Usage Report 仍是必需协议，固定使用
+`budget_tokens=null`、`budget_exhausted=false`；Provider 记账不完整时运行失败。

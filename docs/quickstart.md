@@ -35,10 +35,13 @@ credentials only through Runtime's explicit inherited-environment allowlist. The
 timeout must be greater than `agent_timeout_seconds` in `atrex-evolver.json` so the Bundle can reap
 its child first.
 
-Calling `src/main.py` without the exact Runtime manifest, paths, quota, and sentinel is expected to
+Calling `src/main.py` without the exact Runtime manifest, paths, usage-report destination, and sentinel is expected to
 fail closed.
 
 On every started Agent session, `scratch/evolver-session/` contains the unredacted rendered Prompt
 under `input/`, captured raw Claude stdout/stderr under `provider/`, plus `events.jsonl` and
 `session.json` as normalized accounting and completion metadata. Runtime seals this entire directory
 as the Session Artifact.
+
+No `ATREX_TOKEN_BUDGET` is supplied. The usage report remains mandatory and uses
+`budget_tokens=null` and `budget_exhausted=false`; incomplete provider accounting fails the run.

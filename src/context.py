@@ -92,7 +92,7 @@ def _expected_path(workspace: Path, relative: str, label: str) -> Path:
 
 @dataclass(frozen=True)
 class EvolutionContext:
-    """Validated paths, identity, and quota visible to the Evolver implementation."""
+    """Validated paths and identity visible to the Evolver implementation."""
 
     workspace: Path
     manifest_path: Path
@@ -108,7 +108,6 @@ class EvolutionContext:
     optimizer_digest: str
     idempotency_key: str
     dsl: str
-    token_budget: int
     evidence_prompt: str
     manifest: Mapping[str, Any]
 
@@ -256,13 +255,6 @@ class EvolutionContext:
         session_trace_path = scratch_root / "evolver-session"
         if session_trace_path.exists() and session_trace_path.is_symlink():
             raise ValueError("Session trace path cannot be a symbolic link")
-        raw_budget = _strict_environment(env, "ATREX_TOKEN_BUDGET")
-        try:
-            token_budget = int(raw_budget)
-        except ValueError as error:
-            raise ValueError("ATREX_TOKEN_BUDGET must be an integer") from error
-        if token_budget <= 0 or str(token_budget) != raw_budget:
-            raise ValueError("ATREX_TOKEN_BUDGET must be a canonical positive integer")
         return cls(
             workspace=workspace,
             manifest_path=manifest_path,
@@ -278,7 +270,6 @@ class EvolutionContext:
             optimizer_digest=optimizer_digest,
             idempotency_key=idempotency_key,
             dsl=dsl,
-            token_budget=token_budget,
             evidence_prompt=evidence_prompt,
             manifest=manifest,
         )

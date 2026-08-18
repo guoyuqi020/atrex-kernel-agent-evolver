@@ -102,12 +102,9 @@ def usage_from_model_usage(value: object) -> TokenUsage:
 
 
 class ClaudeUsageObserver:
-    """Consume stream-json lines, deduplicate requests, and stop at the quota."""
+    """Consume stream-json lines and deduplicate provider token accounting."""
 
-    def __init__(self, budget_tokens: int) -> None:
-        if budget_tokens <= 0:
-            raise ValueError("token budget must be positive")
-        self._budget = budget_tokens
+    def __init__(self) -> None:
         self._deltas: list[TokenUsage] = []
         self._terminal = TokenUsage.unavailable()
         self._seen_message_ids: set[str] = set()
@@ -175,8 +172,7 @@ class ClaudeUsageObserver:
         )
 
     def _exhausted_unlocked(self) -> bool:
-        total = self._current_unlocked().total_tokens
-        return total is not None and total >= self._budget
+        return False
 
     @property
     def exhausted(self) -> bool:
@@ -205,10 +201,10 @@ class ClaudeUsageObserver:
             total = sum(buckets.values())
             return {
                 "schema_version": 1,
-                "budget_tokens": self._budget,
+                "budget_tokens": None,
                 "usage": buckets,
                 "total_tokens": total,
-                "budget_exhausted": total >= self._budget,
+                "budget_exhausted": False,
                 "session_count": 1 if session_started else 0,
                 "model_request_count": max(
                     self._model_request_count,

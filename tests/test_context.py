@@ -64,7 +64,6 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "ATREX_EVOLUTION_CANDIDATE": str(workspace / "candidate"),
         "ATREX_EVOLUTION_OUTPUT": str(workspace / "scratch/evolution-output.json"),
         "ATREX_EVIDENCE_PROMPT_PATH": str(workspace / "input/evidence/instructions.md"),
-        "ATREX_TOKEN_BUDGET": "1000",
         "ATREX_TOKEN_USAGE_REPORT": str(workspace / "scratch/token-usage.json"),
     }
 

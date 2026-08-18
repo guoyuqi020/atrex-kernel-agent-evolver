@@ -73,7 +73,6 @@ def _context(tmp_path: Path) -> EvolutionContext:
             "ATREX_EVIDENCE_PROMPT_PATH": str(
                 workspace / "input/evidence/instructions.md"
             ),
-            "ATREX_TOKEN_BUDGET": "1000",
             "ATREX_TOKEN_USAGE_REPORT": str(workspace / "scratch/token-usage.json"),
         }
     )
@@ -140,7 +139,20 @@ def _budget_exhausting_claude(tmp_path: Path) -> Path:
     script.write_text(
         """#!/usr/bin/env python3
 import json
-import time
+import os
+from pathlib import Path
+
+candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
+(candidate / "prompts").mkdir(exist_ok=True)
+(candidate / "prompts/evolve-result.md").write_text("unbounded policy\\n")
+manifest = json.loads(Path(os.environ["ATREX_EVOLUTION_INPUT"]).read_text())
+Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
+    "schema_version": 2,
+    "parent_revision_id": manifest["parent_revision_id"],
+    "hypothesis": "Continue until the evolution direction is complete.",
+    "expected_effect": "Avoid terminating evolution due to provider token count.",
+    "changed_paths": ["prompts/evolve-result.md"],
+}))
 
 print(json.dumps({
     "type": "assistant",
@@ -154,7 +166,6 @@ print(json.dumps({
         },
     },
 }), flush=True)
-time.sleep(30)
 """,
         encoding="utf-8",
     )
@@ -235,17 +246,18 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "candidate" in prompt
 
 
-def test_session_stops_when_live_token_budget_is_exhausted(tmp_path: Path) -> None:
+def test_session_records_large_usage_without_a_token_limit(tmp_path: Path) -> None:
     context = _context(tmp_path)
     config = _config(tmp_path, _budget_exhausting_claude(tmp_path))
 
-    assert execute(context, config) == 125
+    assert execute(context, config) == 0
 
     usage = json.loads(context.token_usage_path.read_text())
     assert usage["total_tokens"] == 1001
-    assert usage["budget_exhausted"] is True
+    assert usage["budget_tokens"] is None
+    assert usage["budget_exhausted"] is False
     session = json.loads((context.session_trace_path / "session.json").read_text())
-    assert session["budget_exhausted"] is True
+    assert session["budget_exhausted"] is False
 
 
 def test_session_rejects_agent_created_trace_path(tmp_path: Path) -> None:
@@ -274,7 +286,6 @@ def test_repository_entrypoint_runs_the_fixed_bundle_contract(tmp_path: Path) ->
             "ATREX_EVIDENCE_PROMPT_PATH": str(
                 context.evidence_root / "instructions.md"
             ),
-            "ATREX_TOKEN_BUDGET": str(context.token_budget),
             "ATREX_TOKEN_USAGE_REPORT": str(context.token_usage_path),
         }
     )
