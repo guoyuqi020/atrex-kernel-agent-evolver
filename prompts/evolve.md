@@ -36,10 +36,13 @@ effect must apply to the specified DSL.
 2. Inspect every repository listed in `visible_agent_repositories`. They contain the current Active,
    already-created Challengers in this Epoch, and retained Agent designs from the Lineage. Compare
    their concrete prompts, skills, workflows, and tools; do not merely vary the Parent blindly.
-3. Read the unified Evidence view in Epoch order. Separate authoritative evaluation facts from
-   untrusted Agent annotations. Look for repeated failed hypotheses, missing information, brittle
-   workflow steps, incorrect tool instructions, weak memory retrieval, or an overly broad search
-   policy.
+3. Read the unified Evidence view in Epoch order. For every completed Epoch, compare the Active and
+   every Challenger under `branches/`, inspect their Attempt outcomes and exact Kernel artifacts,
+   and use `winner_kernel_agent_revision_id`, `best_kernel_revision_id`, and the `selected` fields as
+   authoritative selection facts. Do not mistake one fast Kernel for proof that every Agent change
+   was useful. Separate authoritative evaluation facts from untrusted Agent annotations. Look for
+   repeated failed hypotheses, missing information, brittle workflow steps, incorrect tool
+   instructions, weak memory retrieval, or an overly broad search policy.
 4. State one concrete bottleneck and one minimal Agent-level hypothesis internally.
 5. Change only files required to test that hypothesis. You may revise Backend configuration, Prompt,
    workflow code, tool bindings, memory policy, or DSL guidance, provided the Bundle remains valid.

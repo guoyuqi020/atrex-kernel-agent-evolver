@@ -45,7 +45,7 @@ def _context(tmp_path: Path) -> EvolutionContext:
                 "through_completed_epoch": 0,
                 "current_epoch": None,
                 "visibility": {
-                    "completed_epochs": "promoted_lineage",
+                    "completed_epochs": "all_completed_branches",
                     "current_attempts_before": None,
                 },
             }

@@ -325,7 +325,7 @@ class EvolutionContext:
             or evidence_manifest.get("current_epoch") is not None
             or visibility
             != {
-                "completed_epochs": "promoted_lineage",
+                "completed_epochs": "all_completed_branches",
                 "current_attempts_before": None,
             }
         ):

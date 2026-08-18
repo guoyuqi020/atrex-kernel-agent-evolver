@@ -10,8 +10,8 @@ Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、
 一次调用会：
 
 1. 严格校验 `EvolutionInputManifestV3` 和所有 Runtime 路径；
-2. 读取完整 Parent 仓库、只读的可见 Agent Revision Catalog，以及严格、按 Epoch 组织的
-   Evidence View；
+2. 读取完整 Parent 仓库、只读的可见 Agent Revision Catalog，以及严格、按 Epoch 组织且包含
+   所有已完成分支、Kernel Artifact 与 Agent 胜负结果的 Evidence View；
 3. 使用仓库内固定 Prompt 启动一次全新的非交互 Coding Agent；
 4. 只允许修改可写的完整 Candidate 仓库；
 5. 输出未脱敏 Session Artifact，其中包含最终渲染 Prompt、原始 Claude stream-json

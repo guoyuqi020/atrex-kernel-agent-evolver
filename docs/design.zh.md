@@ -18,9 +18,14 @@ run-<uuid>/
 │   ├── agents/                # 只读可见 Agent Revision 仓库
 │   │   └── agentrev_<id>/
 │   └── evidence/              # 只读 EvidenceViewManifestV1 Tree
-│       ├── manifest.json      # role=evolver；只含已完成 Epoch
+│       ├── manifest.json      # role=evolver；所有已完成分支
 │       ├── bootstrap/
 │       └── epochs/
+│           └── <epoch>/
+│               ├── summary.json
+│               ├── branches/ # Active 与所有 Challenger Attempt 历史
+│               ├── kernels/  # 精确 Kernel Artifact 与 index.json
+│               └── evolution/# 所有 Challenger 的 Evolver Trace
 ├── candidate/                 # Parent 的完整可写副本
 └── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
 ```
@@ -44,8 +49,11 @@ Archive 或超限都会被拒绝。部署后续可以固定另一个 Commit，�
 Parent，并提供非空、无重复的 `visible_agents` Catalog。Runtime 会加入已保留的 Lineage Agent
 历史，以及当前 Epoch 中此前已创建的 Challenger；每个条目都解析到 `input/agents/` 下一个只读
 仓库，并明确提供 Parent Link、创建者、关系类型以及适用时的当前 Epoch Challenger Ordinal。
-入口同时要求严格 Evidence View 使用
-匹配的 Lineage Checkpoint、`role="evolver"`、已完成的晋升 Agent Lineage 且无当前 Epoch。它把环境路径绑定到
+入口同时要求严格 Evidence View 使用匹配的 Lineage Checkpoint、
+`role="evolver"`、所有已完成 Epoch 的全部分支且无当前 Epoch。已完成 Summary 保留
+Active、Challenger、胜出 Agent、起始 Kernel 与最佳 Kernel 身份；Branch Tree 保留每个
+Attempt 与权威 Outcome；`kernels/` 对每个被引用的精确 Kernel Artifact 去重后物化一次。
+入口把环境路径绑定到
 Manifest，并拒绝 Link 与越界路径。Usage Report 目标是必需输入，但不接受 Token Budget。
 
 Evidence 结构 Prompt Fragment 由 Runtime 编写和物化；本仓库只校验其固定路径与 Manifest 绑定的

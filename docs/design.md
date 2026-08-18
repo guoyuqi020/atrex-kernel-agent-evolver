@@ -18,9 +18,14 @@ run-<uuid>/
 │   ├── agents/                # read-only visible Agent revision repositories
 │   │   └── agentrev_<id>/
 │   └── evidence/              # read-only EvidenceViewManifestV1 tree
-│       ├── manifest.json      # role=evolver; completed Epochs only
+│       ├── manifest.json      # role=evolver; all completed branches
 │       ├── bootstrap/
 │       └── epochs/
+│           └── <epoch>/
+│               ├── summary.json
+│               ├── branches/ # Active and every Challenger Attempt history
+│               ├── kernels/  # exact Kernel artifacts plus index.json
+│               └── evolution/# every Challenger Evolver trace
 ├── candidate/                 # writable complete copy of Parent
 └── scratch/                   # writable report, trace, and isolated Agent state
 ```
@@ -49,8 +54,11 @@ identifies exactly one Parent and a nonempty, duplicate-free `visible_agents` ca
 includes the retained Lineage Agent history plus Challengers already created earlier in the current
 Epoch; each catalog entry supplies its Parent link, creator, relationship, and current-Epoch
 Challenger ordinal when applicable, and resolves to one read-only repository under `input/agents/`. It also
-requires a strict Evidence view with the matching lineage checkpoint, `role="evolver"`, the
-completed promoted Agent lineage, and no current Epoch. It binds each environment path to that manifest and rejects
+requires a strict Evidence view with the matching lineage checkpoint, `role="evolver"`, all branches
+of every completed Epoch, and no current Epoch. Completed summaries retain the Active, Challenger,
+winner Agent, starting Kernel, and best Kernel identities. Branch trees retain every Attempt and
+authoritative outcome; `kernels/` materializes each referenced exact Kernel artifact once. It binds
+each environment path to that manifest and rejects
 links and path escapes. A usage-report destination is mandatory, but no token budget is accepted.
 
 The Evidence structure Prompt Fragment is authored and materialized by Runtime. This repository
