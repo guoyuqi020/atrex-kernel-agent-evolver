@@ -81,6 +81,10 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
             for item in context.visible_agents
         ],
         "evidence": "input/evidence",
+        "runtime_tools": {
+            "command": [sys.executable, "runtime-tools/evolver_tools.py"],
+            "scope": "frozen_read_only_evidence",
+        },
         "candidate_repository": "candidate",
         "output": "scratch/evolution-output.json",
     }

@@ -32,22 +32,27 @@ effect must apply to the specified DSL.
 
 # Evidence-driven procedure
 
-1. Inspect the complete Parent repository before editing.
-2. Inspect every repository listed in `visible_agent_repositories`. They contain the current Active,
+1. Run the exact `runtime_tools.command` from Session context with the `history` subcommand. This
+   read-only Runtime-owned tool queries only the frozen Evidence snapshot. Use `branches`,
+   `attempts`, `kernels`, `kernel-read`, `agents`, `agent-diff`, and `trace-paths` as needed. Invoke
+   the command through Bash and treat its JSON as an index into the read-only repositories and
+   Evidence artifacts, not as a replacement for inspecting relevant source files.
+2. Inspect the complete Parent repository before editing.
+3. Inspect every repository listed in `visible_agent_repositories`. They contain the current Active,
    already-created Challengers in this Epoch, and retained Agent designs from the Lineage. Compare
    their concrete prompts, skills, workflows, and tools; do not merely vary the Parent blindly.
-3. Read the unified Evidence view in Epoch order. For every completed Epoch, compare the Active and
+4. Read the unified Evidence view in Epoch order. For every completed Epoch, compare the Active and
    every Challenger under `branches/`, inspect their Attempt outcomes and exact Kernel artifacts,
    and use `winner_kernel_agent_revision_id`, `best_kernel_revision_id`, and the `selected` fields as
    authoritative selection facts. Do not mistake one fast Kernel for proof that every Agent change
    was useful. Separate authoritative evaluation facts from untrusted Agent annotations. Look for
    repeated failed hypotheses, missing information, brittle workflow steps, incorrect tool
    instructions, weak memory retrieval, or an overly broad search policy.
-4. State one concrete bottleneck and one minimal Agent-level hypothesis internally.
-5. Change only files required to test that hypothesis. You may revise Backend configuration, Prompt,
+5. State one concrete bottleneck and one minimal Agent-level hypothesis internally.
+6. Change only files required to test that hypothesis. You may revise Backend configuration, Prompt,
    workflow code, tool bindings, memory policy, or DSL guidance, provided the Bundle remains valid.
-6. Review the exact Parent-versus-Candidate file set and content differences. Remove unrelated churn.
-7. Write the terminal JSON report. `changed_paths` must be the exact sorted set of repository-relative
+7. Review the exact Parent-versus-Candidate file set and content differences. Remove unrelated churn.
+8. Write the terminal JSON report. `changed_paths` must be the exact sorted set of repository-relative
    regular files that were added, modified, or removed. A no-op is invalid.
 
 # Terminal output

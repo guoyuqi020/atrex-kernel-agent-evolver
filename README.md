@@ -9,15 +9,16 @@ evaluation, scheduling, retention, or promotion authority.
 
 One invocation:
 
-1. validates `EvolutionInputManifestV3` and every Runtime-owned path;
+1. validates `EvolutionInputManifestV4` and every Runtime-owned path;
 2. reads the complete Parent repository, the read-only visible Agent revision catalog, and one
    strict, Epoch-organized Evidence view containing all completed branches, Kernel artifacts, and
    Agent selection outcomes;
-3. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
-4. permits changes only in the writable complete Candidate repository;
-5. emits an unredacted Session Artifact containing the rendered Prompt, captured raw Claude
+3. uses Runtime-injected read-only tools to query the frozen Agent/Kernel/Epoch history;
+4. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
+5. permits changes only in the writable complete Candidate repository;
+6. emits an unredacted Session Artifact containing the rendered Prompt, captured raw Claude
    stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; and
-6. validates the Agent-authored `EvolutionOutputV2` before Runtime independently validates and seals
+7. validates the Agent-authored `EvolutionOutputV2` before Runtime independently validates and seals
    the Candidate.
 
 ## Current backend

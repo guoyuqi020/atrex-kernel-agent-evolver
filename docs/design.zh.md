@@ -12,7 +12,7 @@ Runtime 物化以下 Workspace：
 
 ```text
 run-<uuid>/
-├── evolution-input.json       # 只读 EvolutionInputManifestV3
+├── evolution-input.json       # 只读 EvolutionInputManifestV4
 ├── input/
 │   ├── parent/                # 只读完整 Optimizer 仓库
 │   ├── agents/                # 只读可见 Agent Revision 仓库
@@ -26,6 +26,10 @@ run-<uuid>/
 │               ├── branches/ # Active 与所有 Challenger Attempt 历史
 │               ├── kernels/  # 精确 Kernel Artifact 与 index.json
 │               └── evolution/# 所有 Challenger 的 Evolver Trace
+├── runtime-tools/              # 只读 Runtime 持有的快照检索工具
+│   ├── evolver_tools.py
+│   ├── catalog.json        # 精确 vN/agent-vN Lineage Catalog
+│   └── kernels/            # 全部历史精确 Kernel Artifact
 ├── candidate/                 # Parent 的完整可写副本
 └── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
 ```
@@ -45,7 +49,7 @@ Archive 或超限都会被拒绝。部署后续可以固定另一个 Commit，�
 
 ## 3. 输入与输出
 
-入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 3。Manifest 必须标出恰好一个
+入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 4。Manifest 必须标出恰好一个
 Parent，并提供非空、无重复的 `visible_agents` Catalog。Runtime 会加入已保留的 Lineage Agent
 历史，以及当前 Epoch 中此前已创建的 Challenger；每个条目都解析到 `input/agents/` 下一个只读
 仓库，并明确提供 Parent Link、创建者、关系类型以及适用时的当前 Epoch Challenger Ordinal。
@@ -55,6 +59,12 @@ Active、Challenger、胜出 Agent、起始 Kernel 与最佳 Kernel 身份；Bra
 Attempt 与权威 Outcome；`kernels/` 对每个被引用的精确 Kernel Artifact 去重后物化一次。
 入口把环境路径绑定到
 Manifest，并拒绝 Link 与越界路径。Usage Report 目标是必需输入，但不接受 Token Budget。
+
+Runtime 还会在 `runtime-tools/` 下注入只读、限定快照的检索 Client 和 Catalog。Catalog 提供
+精确的 Lineage 内 Kernel/Agent 版本标签、Provenance、评测事实和每个历史 Kernel Artifact
+路径。Client 提供有界 JSON `history`、`branches`、`attempts`、`kernels`、`kernel-read`、
+`agents`、`agent-diff` 和 `trace-paths` 命令。它只读取本次冻结 Workspace，不授予 Registry、
+Gateway、Wiki、评测或晋升权限。
 
 Evidence 结构 Prompt Fragment 由 Runtime 编写和物化；本仓库只校验其固定路径与 Manifest 绑定的
 Digest，再拼入最终 Prompt。

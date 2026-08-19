@@ -21,6 +21,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "input/parent",
         f"input/agents/{REVISION}",
         "input/evidence",
+        "runtime-tools/kernels",
         "candidate",
         "scratch",
     ):
@@ -48,8 +49,20 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         ),
         encoding="utf-8",
     )
+    (workspace / "runtime-tools/catalog.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "evidence_checkpoint": DIGEST,
+                "agents": [],
+                "kernels": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "runtime-tools/evolver_tools.py").write_text("# tool\n")
     manifest = {
-        "schema_version": 3,
+        "schema_version": 4,
         "parent_revision_id": REVISION,
         "evidence_checkpoint": DIGEST,
         "idempotency_key": "epoch:test:challenger",
@@ -71,6 +84,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
             "parent": "input/parent",
             "agents": "input/agents",
             "evidence": "input/evidence",
+            "runtime_tools": "runtime-tools",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-output.json",

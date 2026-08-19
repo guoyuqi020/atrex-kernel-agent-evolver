@@ -12,7 +12,7 @@ Runtime materializes this workspace:
 
 ```text
 run-<uuid>/
-├── evolution-input.json       # read-only EvolutionInputManifestV3
+├── evolution-input.json       # read-only EvolutionInputManifestV4
 ├── input/
 │   ├── parent/                # read-only complete Optimizer repository
 │   ├── agents/                # read-only visible Agent revision repositories
@@ -26,6 +26,10 @@ run-<uuid>/
 │               ├── branches/ # Active and every Challenger Attempt history
 │               ├── kernels/  # exact Kernel artifacts plus index.json
 │               └── evolution/# every Challenger Evolver trace
+├── runtime-tools/              # read-only Runtime-owned snapshot inspection
+│   ├── evolver_tools.py
+│   ├── catalog.json        # exact vN/agent-vN lineage catalog
+│   └── kernels/            # every historical exact Kernel artifact
 ├── candidate/                 # writable complete copy of Parent
 └── scratch/                   # writable report, trace, and isolated Agent state
 ```
@@ -49,7 +53,7 @@ Prompt while retaining compatibility with Runtime's current process transport.
 
 ## 3. Input and output
 
-The entrypoint accepts only Evolution manifest schema 3 with the exact fixed path map. The manifest
+The entrypoint accepts only Evolution manifest schema 4 with the exact fixed path map. The manifest
 identifies exactly one Parent and a nonempty, duplicate-free `visible_agents` catalog. Runtime
 includes the retained Lineage Agent history plus Challengers already created earlier in the current
 Epoch; each catalog entry supplies its Parent link, creator, relationship, and current-Epoch
@@ -60,6 +64,13 @@ winner Agent, starting Kernel, and best Kernel identities. Branch trees retain e
 authoritative outcome; `kernels/` materializes each referenced exact Kernel artifact once. It binds
 each environment path to that manifest and rejects
 links and path escapes. A usage-report destination is mandatory, but no token budget is accepted.
+
+Runtime also injects a read-only, snapshot-scoped inspection client and Catalog under
+`runtime-tools/`. The Catalog supplies exact Lineage-local Kernel and Agent version labels,
+provenance, evaluation facts, and paths to every historical Kernel Artifact. The client provides
+bounded JSON `history`, `branches`, `attempts`, `kernels`, `kernel-read`, `agents`, `agent-diff`, and
+`trace-paths` commands. It reads only this frozen workspace and confers no Registry, Gateway, Wiki,
+evaluation, or promotion authority.
 
 The Evidence structure Prompt Fragment is authored and materialized by Runtime. This repository
 only verifies its fixed path and Manifest-bound Digest before appending it to the final Prompt.

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_MANIFEST_BYTES = 256 * 1024
+MAX_RUNTIME_TOOL_CATALOG_BYTES = 16 * 1024 * 1024
 MAX_EVIDENCE_PROMPT_BYTES = 32 * 1024
 MAX_LAUNCH_INPUT_BYTES = 4096
 LAUNCH_SENTINEL = "Run the versioned Evolver Bundle once."
@@ -114,6 +115,7 @@ class EvolutionContext:
     parent_root: Path
     visible_agents: tuple[VisibleAgent, ...]
     evidence_root: Path
+    runtime_tools_root: Path
     candidate_root: Path
     scratch_root: Path
     output_path: Path
@@ -155,7 +157,7 @@ class EvolutionContext:
                 "Evolution input fields disagree with schema: "
                 f"{sorted(set(manifest) ^ expected_fields)}"
             )
-        if manifest["schema_version"] != 3:
+        if manifest["schema_version"] != 4:
             raise ValueError("unsupported Evolution input schema_version")
         parent_revision_id = _text(manifest["parent_revision_id"], "parent_revision_id")
         if _REVISION_ID.fullmatch(parent_revision_id) is None:
@@ -175,12 +177,13 @@ class EvolutionContext:
             "parent": "input/parent",
             "agents": "input/agents",
             "evidence": "input/evidence",
+            "runtime_tools": "runtime-tools",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-output.json",
         }
         if paths != expected_paths:
-            raise ValueError("Evolution paths disagree with protocol v3")
+            raise ValueError("Evolution paths disagree with protocol v4")
 
         parent_root = _real_directory(
             _expected_path(workspace, expected_paths["parent"], "parent path"),
@@ -211,7 +214,7 @@ class EvolutionContext:
                 "parent_revision_id",
                 "created_by",
             }:
-                raise ValueError("visible Agent fields disagree with protocol v3")
+                raise ValueError("visible Agent fields disagree with protocol v4")
             revision_id = _text(visible["revision_id"], "visible Agent revision_id")
             digest = _text(visible["optimizer_digest"], "visible Agent optimizer_digest")
             relative = _text(visible["path"], "visible Agent path")
@@ -289,6 +292,32 @@ class EvolutionContext:
             _expected_path(workspace, expected_paths["evidence"], "evidence path"),
             "Evidence view",
         )
+        runtime_tools_root = _real_directory(
+            _expected_path(
+                workspace,
+                expected_paths["runtime_tools"],
+                "Runtime Tools path",
+            ),
+            "Runtime Tools",
+        )
+        runtime_catalog = _bounded_json_file(
+            runtime_tools_root / "catalog.json",
+            "Runtime Tools catalog",
+            MAX_RUNTIME_TOOL_CATALOG_BYTES,
+        )
+        if (
+            runtime_catalog.get("schema_version") != 1
+            or runtime_catalog.get("evidence_checkpoint") != evidence_checkpoint
+            or not isinstance(runtime_catalog.get("agents"), list)
+            or not isinstance(runtime_catalog.get("kernels"), list)
+        ):
+            raise ValueError("Runtime Tools catalog disagrees with the Evolution manifest")
+        _bounded_text_file(
+            runtime_tools_root / "evolver_tools.py",
+            "Runtime Tools client",
+            MAX_MANIFEST_BYTES,
+        )
+        _real_directory(runtime_tools_root / "kernels", "Runtime Tools Kernel catalog")
         candidate_root = _real_directory(
             _expected_path(workspace, expected_paths["candidate"], "candidate path"),
             "Candidate repository",
@@ -378,6 +407,7 @@ class EvolutionContext:
             parent_root=parent_root,
             visible_agents=tuple(visible_agents),
             evidence_root=evidence_root,
+            runtime_tools_root=runtime_tools_root,
             candidate_root=candidate_root,
             scratch_root=scratch_root,
             output_path=output_path,

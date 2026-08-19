@@ -25,6 +25,7 @@ def _context(tmp_path: Path) -> EvolutionContext:
         "input/parent",
         f"input/agents/{REVISION}",
         "input/evidence",
+        "runtime-tools/kernels",
         "candidate",
         "scratch",
     ):
@@ -52,10 +53,22 @@ def _context(tmp_path: Path) -> EvolutionContext:
         ),
         encoding="utf-8",
     )
+    (workspace / "runtime-tools/catalog.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "evidence_checkpoint": DIGEST,
+                "agents": [],
+                "kernels": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (workspace / "runtime-tools/evolver_tools.py").write_text("# tool\n")
     (workspace / "input/parent/atrex-bundle.json").write_text("{}")
     (workspace / "candidate/atrex-bundle.json").write_text("{}")
     manifest = {
-        "schema_version": 3,
+        "schema_version": 4,
         "parent_revision_id": REVISION,
         "evidence_checkpoint": DIGEST,
         "idempotency_key": "epoch:test:challenger",
@@ -77,6 +90,7 @@ def _context(tmp_path: Path) -> EvolutionContext:
             "parent": "input/parent",
             "agents": "input/agents",
             "evidence": "input/evidence",
+            "runtime_tools": "runtime-tools",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-output.json",
@@ -263,6 +277,8 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "wiki" not in prompt.lower().split("# session context", 1)[1]
     assert "input/parent" in prompt
     assert f"input/agents/{REVISION}" in prompt
+    assert "runtime-tools/evolver_tools.py" in prompt
+    assert "frozen_read_only_evidence" in prompt
     assert "candidate" in prompt
 
 
