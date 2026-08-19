@@ -48,5 +48,21 @@ under `input/`, captured raw Claude stdout/stderr under `provider/`, plus `event
 `session.json` as normalized accounting and completion metadata. Runtime seals this entire directory
 as the Session Artifact.
 
+The rendered Session context contains the exact Python command for the Runtime-injected inspection
+client. From the Evolution workspace, append one of these subcommands:
+
+```bash
+<injected-python> runtime-tools/evolver_tools.py history
+<injected-python> runtime-tools/evolver_tools.py branches --epoch 1
+<injected-python> runtime-tools/evolver_tools.py attempts --epoch 1 --branch challenger-0001
+<injected-python> runtime-tools/evolver_tools.py kernels
+<injected-python> runtime-tools/evolver_tools.py kernel-read --revision kernelrev_<id>
+<injected-python> runtime-tools/evolver_tools.py agents
+<injected-python> runtime-tools/evolver_tools.py agent-diff --base agentrev_<id> --candidate agentrev_<id>
+<injected-python> runtime-tools/evolver_tools.py trace-paths --epoch 1
+```
+
+These commands query only the frozen local snapshot and return JSON; they do not contact Runtime.
+
 No `ATREX_TOKEN_BUDGET` is supplied. The usage report remains mandatory and uses
 `budget_tokens=null` and `budget_exhausted=false`; incomplete provider accounting fails the run.

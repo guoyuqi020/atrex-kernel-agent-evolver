@@ -45,5 +45,21 @@ Runtime JSON 刻意不提供 Provider、Model 和版本化 Prompt 配置，这�
 `events.jsonl` 和 `session.json` 保存标准化计量与完整性元数据。Runtime 会把整个
 目录封存为 Session Artifact。
 
+渲染后的 Session Context 包含 Runtime 注入检索 Client 的精确 Python 命令。在 Evolution
+Workspace 中可追加以下子命令：
+
+```bash
+<injected-python> runtime-tools/evolver_tools.py history
+<injected-python> runtime-tools/evolver_tools.py branches --epoch 1
+<injected-python> runtime-tools/evolver_tools.py attempts --epoch 1 --branch challenger-0001
+<injected-python> runtime-tools/evolver_tools.py kernels
+<injected-python> runtime-tools/evolver_tools.py kernel-read --revision kernelrev_<id>
+<injected-python> runtime-tools/evolver_tools.py agents
+<injected-python> runtime-tools/evolver_tools.py agent-diff --base agentrev_<id> --candidate agentrev_<id>
+<injected-python> runtime-tools/evolver_tools.py trace-paths --epoch 1
+```
+
+这些命令只查询冻结的本地快照并返回 JSON，不联系 Runtime 服务。
+
 Runtime 不提供 `ATREX_TOKEN_BUDGET`。Usage Report 仍是必需协议，固定使用
 `budget_tokens=null`、`budget_exhausted=false`；Provider 记账不完整时运行失败。
