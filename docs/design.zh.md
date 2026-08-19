@@ -76,13 +76,15 @@ Candidate，校验真实修改集合和 Bundle Policy，封存来源，再运行
 
 ## 4. Token 与进程所有权
 
-Claude Backend 按唯一 Provider Message 解析 stream-json Usage，存在终态 Usage 时以其为准，并对
-未缓存输入、输出、Cache Read、Cache Write 各计一次。Token 数永远不会终止子进程；外层
+Claude、Codex、QoderCLI 与 Pi 使用各自的非交互命令/Stream Adapter，并统一为一个 Session
+Result。Claude/Qoder 解析 stream-json，Pi 聚合已 Settled 的 Message/Compaction Usage，Codex
+观察隔离 Session Ledger 并捕获原始 Rollout。所有 Adapter 对未缓存输入、输出、Cache Read、
+Cache Write 各计一次。Token 数永远不会终止子进程；外层
 SIGTERM/SIGINT 会转发给该进程组，Timeout 与 stdout/stderr 均受限。Report 使用空 Budget，已完成
 模型请求若缺少完整 Provider Bucket 时失败关闭。
 
-Session Artifact 把最终渲染 Prompt 原样保存到 `input/prompt.md`，把捕获的 Claude
-stream-json 保存到 `provider/stdout.stream-json`，并把 Provider stderr 保存到
+Session Artifact 把最终渲染 Prompt 原样保存到 `input/prompt.md`，把捕获的 Provider Stream
+保存到 `provider/stdout.stream-json`，并把 Provider stderr 保存到
 `provider/stderr.log`。Runtime 与 Evolver 不对这些文件做脱敏、Event 筛选或文本
 改写；Provider 输出的 Reasoning、Tool 参数与结果、Credential 或其他敏感字段因此会原样
 保留。`events.jsonl` 只是额外的标准化 Usage 索引；`session.json` 记录终止状态以及原始

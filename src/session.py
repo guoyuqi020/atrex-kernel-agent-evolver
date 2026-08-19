@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
 import tempfile
-import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
+import backends
 from config import EvolverConfig
 from context import EvolutionContext
-from process import ProcessResult, run_bounded
 from report import validate_evolution_output
-from usage import ClaudeUsageObserver
 
 
 def atomic_bytes(path: Path, payload: bytes) -> None:
@@ -98,33 +97,50 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
     )
 
 
-def build_claude_command(config: EvolverConfig, prompt: str) -> list[str]:
-    """Build the single supported non-interactive Claude CLI invocation."""
-    command = [
-        config.agent_executable,
-        "--print",
-        "--verbose",
-        "--dangerously-skip-permissions",
-        "--output-format",
-        "stream-json",
-        "--session-id",
-        str(uuid.uuid4()),
-        "--effort",
-        config.reasoning_effort,
-    ]
-    if config.model:
-        command += ["--model", config.model]
-    if config.session_settings:
-        command += ["--settings", config.session_settings]
-    command.append(prompt)
-    return command
+def _usage_report(
+    result: backends.AgentRunResult | None,
+    *,
+    session_started: bool,
+) -> dict[str, Any]:
+    """Normalize every Backend into Runtime's unbounded TokenUsageReportV1."""
+    usage = result.terminal_usage if result is not None else backends.TokenUsage.unavailable()
+    components = (
+        usage.input_tokens,
+        usage.output_tokens,
+        usage.cache_read_tokens,
+        usage.cache_write_tokens,
+    )
+    complete = all(value is not None for value in components) and usage.measurement == "exact"
+    buckets = {
+        "uncached_input_tokens": usage.input_tokens or 0,
+        "output_tokens": usage.output_tokens or 0,
+        "cache_read_tokens": usage.cache_read_tokens or 0,
+        "cache_write_tokens": usage.cache_write_tokens or 0,
+    }
+    request_count = (
+        sum(1 for event in result.events if event.kind == "usage_delta")
+        if result is not None
+        else 0
+    )
+    if result is not None and result.terminal_usage.total_tokens is not None:
+        request_count = max(request_count, 1)
+    return {
+        "schema_version": 1,
+        "budget_tokens": None,
+        "usage": buckets,
+        "total_tokens": sum(buckets.values()),
+        "budget_exhausted": False,
+        "session_count": 1 if session_started else 0,
+        "model_request_count": request_count,
+        "usage_complete": complete,
+    }
 
 
 def _write_trace(
     context: EvolutionContext,
-    observer: ClaudeUsageObserver,
-    process: ProcessResult,
+    result: backends.AgentRunResult,
     prompt: str,
+    config: EvolverConfig,
 ) -> None:
     """Retain the unredacted Session input and raw captured Provider streams."""
     if (
@@ -139,12 +155,29 @@ def _write_trace(
     atomic_text(context.session_trace_path / "input/prompt.md", prompt)
     atomic_text(
         context.session_trace_path / "provider/stdout.stream-json",
-        process.stdout,
+        result.stdout,
     )
     atomic_text(
         context.session_trace_path / "provider/stderr.log",
-        process.stderr,
+        result.stderr,
     )
+    reserved = {"provider/stdout.stream-json", "provider/stderr.log"}
+    written: set[str] = set()
+    for raw_file in result.raw_session_files:
+        relative = PurePosixPath(raw_file.relative_path)
+        normalized = relative.as_posix()
+        if (
+            relative.is_absolute()
+            or normalized == "."
+            or ".." in relative.parts
+            or not relative.parts
+            or relative.parts[0] != "provider"
+            or normalized in reserved
+            or normalized in written
+        ):
+            raise ValueError("Raw Provider Session file has an unsafe path")
+        written.add(normalized)
+        atomic_bytes(context.session_trace_path.joinpath(*relative.parts), raw_file.payload)
     normalized_events: list[dict[str, Any]] = [
         {
             "type": "session",
@@ -160,7 +193,26 @@ def _write_trace(
             "data": event,
             "ignorable": True,
         }
-        for event in observer.events
+        for event in (
+            {
+                "schema_version": 1,
+                "sequence": item.sequence,
+                "kind": item.kind,
+                "usage": (
+                    None
+                    if item.usage is None
+                    else {
+                        "uncached_input_tokens": item.usage.input_tokens,
+                        "output_tokens": item.usage.output_tokens,
+                        "cache_read_tokens": item.usage.cache_read_tokens,
+                        "cache_write_tokens": item.usage.cache_write_tokens,
+                        "total_tokens": item.usage.total_tokens,
+                        "measurement": item.usage.measurement,
+                    }
+                ),
+            }
+            for item in result.events
+        )
     )
     atomic_text(
         context.session_trace_path / "events.jsonl",
@@ -173,56 +225,72 @@ def _write_trace(
         context.session_trace_path / "session.json",
         {
             "schema_version": 1,
-            "backend": "claude",
-            "returncode": process.returncode,
-            "timed_out": process.timed_out,
-            "output_overflow": process.output_overflow,
-            "raw_provider_capture_complete": not process.output_overflow,
-            "externally_terminated": process.externally_terminated,
-            "budget_exhausted": observer.exhausted,
+            "backend": result.runtime_id,
+            "session_id": result.session_id,
+            "reasoning_effort": config.reasoning_effort,
+            "runtime_bound": config.runtime_bound,
+            "session_settings_sha256": hashlib.sha256(
+                config.session_settings.encode("utf-8")
+            ).hexdigest(),
+            "returncode": result.exit_status,
+            "timed_out": result.timed_out,
+            "raw_provider_capture_complete": result.raw_provider_capture_complete,
+            "observation_errors": list(result.observation_errors),
+            "policy_diagnostics": list(result.policy_diagnostics),
+            "budget_exhausted": False,
         },
     )
 
 
 def execute(context: EvolutionContext, config: EvolverConfig) -> int:
     """Run one Agent, validate its annotation, and always publish provider usage."""
-    observer = ClaudeUsageObserver()
-    process: ProcessResult | None = None
+    result: backends.AgentRunResult | None = None
     session_started = False
     try:
         prompt = render_prompt(context, config)
-        environment = os.environ.copy()
-        environment.update(
-            {
-                "IS_SANDBOX": "1",
-                "ATREX_EVOLUTION_INPUT": str(context.manifest_path),
-                "ATREX_EVOLUTION_CANDIDATE": str(context.candidate_root),
-                "ATREX_EVOLUTION_OUTPUT": str(context.output_path),
-                "ATREX_TOKEN_USAGE_REPORT": str(context.token_usage_path),
-            }
+        def run_provider(
+            command: list[str],
+            cwd: Path,
+            timeout: int | None,
+            env: dict[str, str] | None = None,
+            observer: backends.ProcessObserver | None = None,
+        ) -> backends.ProcessResult:
+            return backends.run_bounded(
+                [config.agent_executable, *command[1:]],
+                cwd,
+                timeout,
+                env,
+                observer,
+            )
+
+        runtime = backends.build_agent_runtime(
+            config.agent_backend,
+            process_runner=run_provider,
         )
-        if environment.get("ANTHROPIC_AUTH_TOKEN"):
-            environment.pop("ANTHROPIC_API_KEY", None)
         session_started = True
-        process = run_bounded(
-            build_claude_command(config, prompt),
-            cwd=context.workspace,
-            environment=environment,
-            timeout_seconds=config.agent_timeout_seconds,
-            max_stdout_chars=config.max_stdout_chars,
-            max_stderr_chars=config.max_stderr_chars,
-            stdout_observer=observer.observe,
+        result = runtime.run(
+            backends.AgentRunRequest(
+                workspace=context.workspace,
+                prompt=prompt,
+                timeout_s=config.agent_timeout_seconds,
+                reasoning_effort=config.reasoning_effort,
+                session_settings=config.session_settings,
+                token_budget=None,
+                environment=(
+                    ("ATREX_EVOLUTION_INPUT", str(context.manifest_path)),
+                    ("ATREX_EVOLUTION_CANDIDATE", str(context.candidate_root)),
+                    ("ATREX_EVOLUTION_OUTPUT", str(context.output_path)),
+                    ("ATREX_TOKEN_USAGE_REPORT", str(context.token_usage_path)),
+                ),
+            )
         )
-        _write_trace(context, observer, process, prompt)
-        if process.timed_out:
+        _write_trace(context, result, prompt, config)
+        if not result.raw_provider_capture_complete:
+            return 126
+        if result.timed_out:
             return 124
-        if process.externally_terminated:
-            return 143
-        if process.output_overflow:
-            print("[evolver] Agent diagnostic output exceeded its bound", file=sys.stderr)
-            return 1
-        if process.returncode != 0:
-            return process.returncode
+        if result.exit_status != 0:
+            return result.exit_status
         validate_evolution_output(
             context.output_path,
             expected_parent_revision_id=context.parent_revision_id,
@@ -232,7 +300,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
     finally:
         atomic_json(
             context.token_usage_path,
-            observer.report(session_started=session_started),
+            _usage_report(result, session_started=session_started),
         )
 
 

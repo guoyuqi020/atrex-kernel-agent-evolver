@@ -82,14 +82,16 @@ runs the configured Active-versus-Challenger-pool evaluation.
 
 ## 4. Token and process ownership
 
-The Claude backend parses stream-json usage per unique provider message, uses the terminal usage when
-available, and counts uncached input, output, cache reads, and cache writes exactly once. Token count
-never terminates the child. Outer SIGTERM/SIGINT is relayed to that group; timeout and captured
+Claude, Codex, QoderCLI, and Pi use separate non-interactive command/stream Adapters with one common
+Session result. Claude and Qoder parse stream-json usage, Pi aggregates settled message/compaction
+usage, and Codex observes its isolated Session Ledger and captures the raw rollout. Every Adapter
+normalizes uncached input, output, cache reads, and cache writes exactly once. Token count never
+terminates the child. Outer SIGTERM/SIGINT is relayed to that group; timeout and captured
 stdout/stderr are bounded. The report uses a null budget and fails closed when a completed model
 request lacks complete provider buckets.
 
-The Session Artifact preserves the final rendered Prompt at `input/prompt.md`, the captured Claude
-stream-json stream at `provider/stdout.stream-json`, and captured Provider stderr at
+The Session Artifact preserves the final rendered Prompt at `input/prompt.md`, the captured Provider
+stream at `provider/stdout.stream-json`, and captured Provider stderr at
 `provider/stderr.log`. Runtime and Evolver apply no redaction, event selection, or text rewriting to
 those files. Reasoning, tool arguments and results, credentials, or other sensitive fields emitted
 by the Provider therefore remain present. `events.jsonl` is an additional normalized usage index;

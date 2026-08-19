@@ -15,10 +15,9 @@ def _repository(tmp_path: Path) -> Path:
     (repository / "atrex-evolver.json").write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "agent_backend": "claude",
                 "agent_executable": "claude",
-                "model": "",
                 "reasoning_effort": "max",
                 "session_settings": "",
                 "prompt": "prompts/evolve.md",
@@ -33,21 +32,40 @@ def _repository(tmp_path: Path) -> Path:
     return repository
 
 
-def test_config_loads_fixed_claude_backend(tmp_path: Path) -> None:
+def test_config_loads_bundle_default_backend(tmp_path: Path) -> None:
     config = EvolverConfig.load(_repository(tmp_path))
 
     assert config.agent_backend == "claude"
     assert config.prompt_path.name == "evolve.md"
 
 
-def test_config_rejects_unaccounted_backend(tmp_path: Path) -> None:
+@pytest.mark.parametrize("backend", ("claude", "codex", "qodercli", "pi"))
+def test_runtime_binding_selects_every_supported_backend(
+    tmp_path: Path,
+    backend: str,
+) -> None:
     repository = _repository(tmp_path)
-    value = json.loads((repository / "atrex-evolver.json").read_text())
-    value["agent_backend"] = "codex"
-    (repository / "atrex-evolver.json").write_text(json.dumps(value))
+    config = EvolverConfig.load(
+        repository,
+        {
+            "ATREX_AGENT_BACKEND": backend,
+            "ATREX_AGENT_REASONING_EFFORT": "high",
+            "ATREX_AGENT_SESSION_SETTINGS": "",
+        },
+    )
 
-    with pytest.raises(ValueError, match="supports only"):
-        EvolverConfig.load(repository)
+    assert config.agent_backend == backend
+    assert config.agent_executable == backend
+    assert config.reasoning_effort == "high"
+    assert config.runtime_bound is True
+
+
+def test_config_rejects_incomplete_runtime_binding(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="incomplete Runtime Agent binding"):
+        EvolverConfig.load(
+            _repository(tmp_path),
+            {"ATREX_AGENT_BACKEND": "codex"},
+        )
 
 
 def test_config_rejects_prompt_escape(tmp_path: Path) -> None:
@@ -58,4 +76,3 @@ def test_config_rejects_prompt_escape(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="safe repository-relative"):
         EvolverConfig.load(repository)
-

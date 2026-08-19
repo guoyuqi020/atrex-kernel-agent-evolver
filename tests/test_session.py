@@ -212,7 +212,6 @@ def _config(tmp_path: Path, executable: Path) -> EvolverConfig:
     return EvolverConfig(
         agent_backend="claude",
         agent_executable=str(executable),
-        model="",
         reasoning_effort="max",
         session_settings="",
         prompt_path=prompt,
@@ -220,6 +219,7 @@ def _config(tmp_path: Path, executable: Path) -> EvolverConfig:
         max_stdout_chars=8192,
         max_stderr_chars=8192,
         max_output_manifest_bytes=4096,
+        runtime_bound=True,
     )
 
 
@@ -249,6 +249,9 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
         context.session_trace_path / "provider/stderr.log"
     ).read_text()
     session = json.loads((context.session_trace_path / "session.json").read_text())
+    assert session["backend"] == "claude"
+    assert session["reasoning_effort"] == "max"
+    assert session["runtime_bound"] is True
     assert session["raw_provider_capture_complete"] is True
     normalized = (context.session_trace_path / "events.jsonl").read_text().splitlines()
     assert json.loads(normalized[0]) == {

@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 _EXECUTABLE = re.compile(r"^[A-Za-z0-9_.+-]+$")
-
+_DEFAULT_EXECUTABLE = {
+    "claude": "claude",
+    "codex": "codex",
+    "pi": "pi",
+    "qodercli": "qodercli",
+}
 
 def _object(value: object, label: str) -> dict[str, Any]:
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
@@ -50,7 +57,6 @@ class EvolverConfig:
 
     agent_backend: str
     agent_executable: str
-    model: str
     reasoning_effort: str
     session_settings: str
     prompt_path: Path
@@ -58,9 +64,14 @@ class EvolverConfig:
     max_stdout_chars: int
     max_stderr_chars: int
     max_output_manifest_bytes: int
+    runtime_bound: bool = False
 
     @classmethod
-    def load(cls, repository: Path) -> EvolverConfig:
+    def load(
+        cls,
+        repository: Path,
+        environment: Mapping[str, str] | None = None,
+    ) -> EvolverConfig:
         path = repository / "atrex-evolver.json"
         if path.is_symlink() or not path.is_file():
             raise ValueError("Evolver config must be a regular file")
@@ -69,7 +80,6 @@ class EvolverConfig:
             "schema_version",
             "agent_backend",
             "agent_executable",
-            "model",
             "reasoning_effort",
             "session_settings",
             "prompt",
@@ -82,11 +92,11 @@ class EvolverConfig:
             raise ValueError(
                 f"Evolver config fields disagree with schema: {sorted(set(value) ^ expected)}"
             )
-        if value["schema_version"] != 1:
+        if value["schema_version"] != 2:
             raise ValueError("unsupported Evolver config schema_version")
         backend = _text(value["agent_backend"], "agent_backend")
-        if backend != "claude":
-            raise ValueError("Evolver v1 supports only the token-accounted claude backend")
+        if backend not in {"claude", "codex", "pi", "qodercli"}:
+            raise ValueError(f"unsupported Evolver agent backend: {backend}")
         executable = _text(value["agent_executable"], "agent_executable")
         executable_path = Path(executable)
         if not executable_path.is_absolute() and _EXECUTABLE.fullmatch(executable) is None:
@@ -94,14 +104,37 @@ class EvolverConfig:
         effort = _text(value["reasoning_effort"], "reasoning_effort")
         if effort not in {"low", "medium", "high", "max"}:
             raise ValueError("unsupported reasoning_effort")
+        settings = _text(value["session_settings"], "session_settings", allow_empty=True)
+        binding = os.environ if environment is None else environment
+        binding_keys = {
+            "ATREX_AGENT_BACKEND",
+            "ATREX_AGENT_REASONING_EFFORT",
+            "ATREX_AGENT_SESSION_SETTINGS",
+        }
+        present = binding_keys.intersection(binding)
+        if present and present != binding_keys:
+            missing = sorted(binding_keys - present)
+            raise ValueError(f"incomplete Runtime Agent binding; missing: {missing}")
+        runtime_bound = bool(present)
+        if runtime_bound:
+            backend = _text(binding["ATREX_AGENT_BACKEND"], "Runtime agent backend")
+            if backend not in {"claude", "codex", "pi", "qodercli"}:
+                raise ValueError(f"unsupported Runtime Evolver agent backend: {backend}")
+            effort = _text(
+                binding["ATREX_AGENT_REASONING_EFFORT"],
+                "Runtime reasoning effort",
+            )
+            if effort not in {"low", "medium", "high", "max"}:
+                raise ValueError(f"unsupported Runtime reasoning effort: {effort}")
+            settings = binding["ATREX_AGENT_SESSION_SETTINGS"]
+            if "\x00" in settings:
+                raise ValueError("Runtime session settings cannot contain NUL")
+            executable = _DEFAULT_EXECUTABLE[backend]
         return cls(
             agent_backend=backend,
             agent_executable=executable,
-            model=_text(value["model"], "model", allow_empty=True),
             reasoning_effort=effort,
-            session_settings=_text(
-                value["session_settings"], "session_settings", allow_empty=True
-            ),
+            session_settings=settings,
             prompt_path=_repository_file(repository, value["prompt"], "prompt"),
             agent_timeout_seconds=_positive_int(
                 value["agent_timeout_seconds"], "agent_timeout_seconds"
@@ -111,4 +144,5 @@ class EvolverConfig:
             max_output_manifest_bytes=_positive_int(
                 value["max_output_manifest_bytes"], "max_output_manifest_bytes"
             ),
+            runtime_bound=runtime_bound,
         )

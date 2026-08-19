@@ -7,6 +7,9 @@ entrypoint once. For the current compatibility transport configure:
 
 ```json
 {
+  "agent_backend": "claude",
+  "reasoning_effort": "max",
+  "session_settings": "",
   "repository": "git@github.com:guoyuqi020/atrex-kernel-agent-evolver.git",
   "commit": "<full-evolver-commit-sha>",
   "git_executable": "/usr/bin/git",
@@ -17,7 +20,8 @@ entrypoint once. For the current compatibility transport configure:
   "max_bundle_bytes": 8388608,
   "environment": {
     "values": {},
-    "inherit": ["PATH", "ANTHROPIC_AUTH_TOKEN"]
+    "inherit": ["PATH"],
+    "inherit_optional": ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "CODEX_HOME"]
   },
   "isolated_home_environment_keys": ["HOME"],
   "session_trace_relative_path": "scratch/evolver-session",
@@ -34,17 +38,17 @@ production should use the separately controlled remote repository shown above.
 Runtime fetches exactly the configured full commit, rejects links/submodules and unsafe archives,
 seals the complete exported tree in its Artifact Store, validates the strict root manifest and
 Bundle limits, and appends the manifest-owned entrypoint to the command prefix. The derived content
-digest remains an integrity/provenance value; deployment identity is the Git commit. Pass Claude
-credentials only through Runtime's explicit inherited-environment allowlist. The outer Worker
+digest remains an integrity/provenance value; deployment identity is the Git commit. Pass the
+selected Backend's credentials only through Runtime's explicit inherited-environment allowlist. The outer Worker
 timeout must be greater than `agent_timeout_seconds` in `atrex-evolver.json` so the Bundle can reap
 its child first.
 
-Provider, model, and versioned Prompt configuration are intentionally absent from Runtime JSON; the
-Evolver repository owns them. Calling `src/main.py` without the exact Runtime manifest, paths,
+Runtime binds Backend, reasoning effort, and Backend-specific session settings. The Evolver
+repository owns the Adapter implementation and versioned Prompt. Calling `src/main.py` without the exact Runtime manifest, paths,
 usage-report destination, and sentinel is expected to fail closed.
 
 On every started Agent session, `scratch/evolver-session/` contains the unredacted rendered Prompt
-under `input/`, captured raw Claude stdout/stderr under `provider/`, plus `events.jsonl` and
+under `input/`, captured raw Provider stdout/stderr under `provider/`, plus `events.jsonl` and
 `session.json` as normalized accounting and completion metadata. Runtime seals this entire directory
 as the Session Artifact.
 
