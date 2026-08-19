@@ -26,6 +26,22 @@ def test_every_backend_builds_one_fresh_noninteractive_command() -> None:
     assert all(command[-1] == "prompt" for command in commands.values())
 
 
+def test_provider_output_limits_are_configurable(tmp_path: Path) -> None:
+    script = tmp_path / "large-output.py"
+    script.write_text("print('x' * 1000)\n", encoding="utf-8")
+
+    result = run_bounded(
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        timeout=10,
+        max_stdout_chars=32,
+        max_stderr_chars=32,
+    )
+
+    assert result.output_overflow is True
+    assert len(result.stdout) <= 32
+
+
 def test_codex_terminal_usage_uses_disjoint_cache_buckets() -> None:
     stdout = json.dumps(
         {

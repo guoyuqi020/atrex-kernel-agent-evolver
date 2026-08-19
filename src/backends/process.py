@@ -341,8 +341,15 @@ def run_bounded(
     timeout: int | None,
     env: dict[str, str] | None = None,
     observer: ProcessObserver | None = None,
+    *,
+    max_stdout_chars: int | None = None,
+    max_stderr_chars: int | None = None,
 ) -> ProcessResult:
     """Run a guarded command with live output observation and a wall deadline."""
+    max_stdout_chars = MAX_CAPTURE_CHARS if max_stdout_chars is None else max_stdout_chars
+    max_stderr_chars = MAX_CAPTURE_CHARS if max_stderr_chars is None else max_stderr_chars
+    if max_stdout_chars <= 0 or max_stderr_chars <= 0:
+        raise ValueError("Provider output limits must be positive")
     proc = subprocess.Popen(
         command,
         cwd=str(cwd),
@@ -376,7 +383,7 @@ def run_bounded(
             if proc.stdout is None:
                 return
             while chunk := proc.stdout.readline(OUTPUT_READ_CHUNK_CHARS):
-                remaining = MAX_CAPTURE_CHARS - captured
+                remaining = max_stdout_chars - captured
                 if remaining <= 0:
                     output_limit_exceeded.set()
                     observation_stop.set()
@@ -404,7 +411,7 @@ def run_bounded(
             if proc.stderr is None:
                 return
             while chunk := proc.stderr.readline(OUTPUT_READ_CHUNK_CHARS):
-                remaining = MAX_CAPTURE_CHARS - captured
+                remaining = max_stderr_chars - captured
                 if remaining <= 0:
                     output_limit_exceeded.set()
                     observation_stop.set()
