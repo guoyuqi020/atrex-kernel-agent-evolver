@@ -18,6 +18,7 @@ _DEFAULT_EXECUTABLE = {
     "qodercli": "qodercli",
 }
 
+
 def _object(value: object, label: str) -> dict[str, Any]:
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ValueError(f"{label} must be a JSON object")
@@ -65,6 +66,7 @@ class EvolverConfig:
     max_stderr_chars: int
     max_output_manifest_bytes: int
     runtime_bound: bool = False
+    model: str | None = None
 
     @classmethod
     def load(
@@ -108,6 +110,7 @@ class EvolverConfig:
         binding = os.environ if environment is None else environment
         binding_keys = {
             "ATREX_AGENT_BACKEND",
+            "ATREX_AGENT_MODEL",
             "ATREX_AGENT_REASONING_EFFORT",
             "ATREX_AGENT_SESSION_SETTINGS",
         }
@@ -129,7 +132,13 @@ class EvolverConfig:
             settings = binding["ATREX_AGENT_SESSION_SETTINGS"]
             if "\x00" in settings:
                 raise ValueError("Runtime session settings cannot contain NUL")
+            runtime_model = binding["ATREX_AGENT_MODEL"].strip()
+            if "\x00" in runtime_model:
+                raise ValueError("Runtime model cannot contain NUL")
+            model = runtime_model or None
             executable = _DEFAULT_EXECUTABLE[backend]
+        else:
+            model = None
         return cls(
             agent_backend=backend,
             agent_executable=executable,
@@ -145,4 +154,5 @@ class EvolverConfig:
                 value["max_output_manifest_bytes"], "max_output_manifest_bytes"
             ),
             runtime_bound=runtime_bound,
+            model=model,
         )

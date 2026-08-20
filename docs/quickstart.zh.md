@@ -41,7 +41,8 @@ Manifest 与 Bundle 限制，再把 Manifest 持有的入口追加到 Command Pr
 环境白名单传递。外层 Worker Timeout 必须大于 `atrex-evolver.json` 的
 `agent_timeout_seconds`，使 Bundle 有机会先回收子进程。
 
-Runtime 绑定 Backend、Reasoning Effort 与 Backend-specific Session Settings；Evolver 仓库持有
+Runtime 绑定 Backend、Lineage 所选 Model、Reasoning Effort 与 Backend-specific Session
+Settings；空 Model 表示使用 Backend CLI 默认值。Evolver 仓库持有
 Adapter 实现和版本化 Prompt。
 缺少准确 Runtime Manifest、路径、Usage Report 目标或 Sentinel 时直接调用 `src/main.py` 必须失败关闭。
 
@@ -62,9 +63,13 @@ Workspace 中可追加以下子命令：
 <injected-python> runtime-tools/evolver_tools.py agents
 <injected-python> runtime-tools/evolver_tools.py agent-diff --base agentrev_<id> --candidate agentrev_<id>
 <injected-python> runtime-tools/evolver_tools.py trace-paths --epoch 1
+<injected-python> runtime-tools/evolver_tools.py candidate-reset --base agentrev_<historical-id>
 ```
 
-这些命令只查询冻结的本地快照并返回 JSON，不联系 Runtime 服务。
+所有命令只使用冻结的本地快照并返回 JSON，不联系 Runtime 服务。`candidate-reset` 是唯一写操作：
+选择 `evolve_from_history` 时必须调用；它只接受已完成的 Lineage 历史，只原子替换
+`candidate/`，并记录其 Base。
 
-Runtime 不提供 `ATREX_TOKEN_BUDGET`。Usage Report 仍是必需协议，固定使用
-`budget_tokens=null`、`budget_exhausted=false`；Provider 记账不完整时运行失败。
+Runtime 不提供 Usage 配额。Schema v2 Usage Report 仍是必需协议，固定使用 `budget=null`、
+`budget_exhausted=false`。QoderCLI 记录 Credit，Claude、Codex 与 Pi 记录 Provider Token；
+所选 Provider 原生单位的记账不完整时运行失败。

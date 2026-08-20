@@ -164,9 +164,10 @@ class EvolutionContext:
             raise ValueError("parent_revision_id is invalid")
         evidence_checkpoint = _text(manifest["evidence_checkpoint"], "evidence_checkpoint")
         optimizer_digest = _text(manifest["optimizer_digest"], "optimizer_digest")
-        if _DIGEST.fullmatch(evidence_checkpoint) is None or _DIGEST.fullmatch(
-            optimizer_digest
-        ) is None:
+        if (
+            _DIGEST.fullmatch(evidence_checkpoint) is None
+            or _DIGEST.fullmatch(optimizer_digest) is None
+        ):
             raise ValueError("Evolution artifact digest is invalid")
         idempotency_key = _text(manifest["idempotency_key"], "idempotency_key", max_length=300)
         dsl = _text(manifest["dsl"], "dsl", max_length=32)
@@ -236,8 +237,7 @@ class EvolutionContext:
                 or _DIGEST.fullmatch(digest) is None
                 or relative != f"input/agents/{revision_id}"
                 or not isinstance(parent, bool)
-                or relationship
-                not in {"active", "current_epoch_challenger", "lineage_history"}
+                or relationship not in {"active", "current_epoch_challenger", "lineage_history"}
                 or parent != (relationship == "active")
                 or (
                     relationship == "current_epoch_challenger"
@@ -247,10 +247,7 @@ class EvolutionContext:
                         or challenger_ordinal <= 0
                     )
                 )
-                or (
-                    relationship != "current_epoch_challenger"
-                    and challenger_ordinal is not None
-                )
+                or (relationship != "current_epoch_challenger" and challenger_ordinal is not None)
                 or (
                     visible_parent_revision_id is not None
                     and (
@@ -377,9 +374,7 @@ class EvolutionContext:
         for required in ("bootstrap", "epochs"):
             _real_directory(evidence_root / required, f"Evidence {required}")
         output_path = _expected_path(workspace, expected_paths["output"], "output path")
-        supplied_candidate_input = Path(
-            _strict_environment(env, "ATREX_EVOLUTION_CANDIDATE")
-        )
+        supplied_candidate_input = Path(_strict_environment(env, "ATREX_EVOLUTION_CANDIDATE"))
         supplied_output_input = Path(_strict_environment(env, "ATREX_EVOLUTION_OUTPUT"))
         if supplied_candidate_input.is_symlink() or supplied_output_input.is_symlink():
             raise ValueError("Evolution environment paths cannot be symbolic links")
@@ -390,9 +385,9 @@ class EvolutionContext:
         if output_path.exists():
             raise ValueError("Evolution output must not exist before the Agent session")
 
-        token_usage_path = Path(
-            _strict_environment(env, "ATREX_TOKEN_USAGE_REPORT")
-        ).resolve(strict=False)
+        token_usage_path = Path(_strict_environment(env, "ATREX_TOKEN_USAGE_REPORT")).resolve(
+            strict=False
+        )
         expected_usage_path = scratch_root / "token-usage.json"
         if token_usage_path != expected_usage_path:
             raise ValueError("ATREX_TOKEN_USAGE_REPORT must be scratch/token-usage.json")

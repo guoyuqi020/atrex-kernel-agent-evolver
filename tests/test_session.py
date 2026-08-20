@@ -103,9 +103,7 @@ def _context(tmp_path: Path) -> EvolutionContext:
             "ATREX_EVOLUTION_INPUT": str(manifest_path),
             "ATREX_EVOLUTION_CANDIDATE": str(workspace / "candidate"),
             "ATREX_EVOLUTION_OUTPUT": str(workspace / "scratch/evolution-output.json"),
-            "ATREX_EVIDENCE_PROMPT_PATH": str(
-                workspace / "input/evidence/instructions.md"
-            ),
+            "ATREX_EVIDENCE_PROMPT_PATH": str(workspace / "input/evidence/instructions.md"),
             "ATREX_TOKEN_USAGE_REPORT": str(workspace / "scratch/token-usage.json"),
         }
     )
@@ -124,8 +122,9 @@ candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
 (candidate / "prompts").mkdir(exist_ok=True)
 (candidate / "prompts/evolve-result.md").write_text("new policy\\n")
 Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
-    "schema_version": 2,
-    "parent_revision_id": json.loads(
+    "schema_version": 3,
+    "proposal_type": "evolved",
+    "base_revision_id": json.loads(
         Path(os.environ["ATREX_EVOLUTION_INPUT"]).read_text()
     )["parent_revision_id"],
     "hypothesis": "Use a narrower evidence-driven search policy.",
@@ -180,8 +179,9 @@ candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
 (candidate / "prompts/evolve-result.md").write_text("unbounded policy\\n")
 manifest = json.loads(Path(os.environ["ATREX_EVOLUTION_INPUT"]).read_text())
 Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
-    "schema_version": 2,
-    "parent_revision_id": manifest["parent_revision_id"],
+    "schema_version": 3,
+    "proposal_type": "evolved",
+    "base_revision_id": manifest["parent_revision_id"],
     "hypothesis": "Continue until the evolution direction is complete.",
     "expected_effect": "Avoid terminating evolution due to provider token count.",
     "changed_paths": ["prompts/evolve-result.md"],
@@ -220,6 +220,7 @@ def _config(tmp_path: Path, executable: Path) -> EvolverConfig:
         max_stderr_chars=8192,
         max_output_manifest_bytes=4096,
         runtime_bound=True,
+        model="lineage-model",
     )
 
 
@@ -231,26 +232,26 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
 
     assert (context.candidate_root / "prompts/evolve-result.md").is_file()
     usage = json.loads(context.token_usage_path.read_text())
-    assert usage["total_tokens"] == 28
+    assert usage["usage_unit"] == "provider_tokens"
+    assert usage["consumed"] == 28
     assert usage["usage_complete"] is True
     assert (context.session_trace_path / "events.jsonl").is_file()
     assert (context.session_trace_path / "session.json").is_file()
     prompt = (context.session_trace_path / "input/prompt.md").read_text()
     assert "Fixed evolution instructions." in prompt
     assert '"dsl": "triton"' in prompt
-    provider_stdout = (
-        context.session_trace_path / "provider/stdout.stream-json"
-    ).read_text()
+    provider_stdout = (context.session_trace_path / "provider/stdout.stream-json").read_text()
     assert "raw hidden reasoning" in provider_stdout
     assert "raw-tool-secret" in provider_stdout
     assert "raw tool result" in provider_stdout
     assert "Bearer raw-provider-secret" in provider_stdout
-    assert "raw stderr credential" in (
-        context.session_trace_path / "provider/stderr.log"
-    ).read_text()
+    assert (
+        "raw stderr credential" in (context.session_trace_path / "provider/stderr.log").read_text()
+    )
     session = json.loads((context.session_trace_path / "session.json").read_text())
     assert session["backend"] == "claude"
     assert session["reasoning_effort"] == "max"
+    assert session["model"] == "lineage-model"
     assert session["runtime_bound"] is True
     assert session["raw_provider_capture_complete"] is True
     normalized = (context.session_trace_path / "events.jsonl").read_text().splitlines()
@@ -281,7 +282,12 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "input/parent" in prompt
     assert f"input/agents/{REVISION}" in prompt
     assert "runtime-tools/evolver_tools.py" in prompt
-    assert "frozen_read_only_evidence" in prompt
+    assert "frozen_evidence_and_candidate_control" in prompt
+    assert "# Runtime capabilities" in prompt
+    assert "connect a best Kernel revision" in prompt
+    assert "not a mandatory call sequence" in prompt
+    assert "candidate-reset --base" in prompt
+    assert "Do not copy, delete, or reconstruct" in prompt
     assert "candidate" in prompt
 
 
@@ -292,8 +298,8 @@ def test_session_records_large_usage_without_a_token_limit(tmp_path: Path) -> No
     assert execute(context, config) == 0
 
     usage = json.loads(context.token_usage_path.read_text())
-    assert usage["total_tokens"] == 1001
-    assert usage["budget_tokens"] is None
+    assert usage["consumed"] == 1001
+    assert usage["budget"] is None
     assert usage["budget_exhausted"] is False
     session = json.loads((context.session_trace_path / "session.json").read_text())
     assert session["budget_exhausted"] is False
@@ -322,9 +328,7 @@ def test_repository_entrypoint_runs_the_fixed_bundle_contract(tmp_path: Path) ->
             "ATREX_EVOLUTION_INPUT": str(context.manifest_path),
             "ATREX_EVOLUTION_CANDIDATE": str(context.candidate_root),
             "ATREX_EVOLUTION_OUTPUT": str(context.output_path),
-            "ATREX_EVIDENCE_PROMPT_PATH": str(
-                context.evidence_root / "instructions.md"
-            ),
+            "ATREX_EVIDENCE_PROMPT_PATH": str(context.evidence_root / "instructions.md"),
             "ATREX_TOKEN_USAGE_REPORT": str(context.token_usage_path),
         }
     )

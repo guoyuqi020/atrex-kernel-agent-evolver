@@ -82,7 +82,7 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
         "evidence": "input/evidence",
         "runtime_tools": {
             "command": [sys.executable, "runtime-tools/evolver_tools.py"],
-            "scope": "frozen_read_only_evidence",
+            "scope": "frozen_evidence_and_candidate_control",
         },
         "candidate_repository": "candidate",
         "output": "scratch/evolution-output.json",
@@ -102,7 +102,7 @@ def _usage_report(
     *,
     session_started: bool,
 ) -> dict[str, Any]:
-    """Normalize every Backend into Runtime's unbounded TokenUsageReportV1."""
+    """Normalize every Backend into Runtime's provider-native usage report."""
     usage = result.terminal_usage if result is not None else backends.TokenUsage.unavailable()
     components = (
         usage.input_tokens,
@@ -110,7 +110,14 @@ def _usage_report(
         usage.cache_read_tokens,
         usage.cache_write_tokens,
     )
-    complete = all(value is not None for value in components) and usage.measurement == "exact"
+    unit = (
+        "credits" if result is not None and result.runtime_id == "qodercli" else "provider_tokens"
+    )
+    complete = (
+        usage.credits is not None
+        if unit == "credits"
+        else all(value is not None for value in components)
+    ) and usage.measurement == "exact"
     buckets = {
         "uncached_input_tokens": usage.input_tokens or 0,
         "output_tokens": usage.output_tokens or 0,
@@ -122,13 +129,19 @@ def _usage_report(
         if result is not None
         else 0
     )
-    if result is not None and result.terminal_usage.total_tokens is not None:
+    if result is not None and (
+        result.terminal_usage.total_tokens is not None or result.terminal_usage.credits is not None
+    ):
         request_count = max(request_count, 1)
+    credits = usage.credits if unit == "credits" else None
+    consumed = credits if credits is not None else float(sum(buckets.values()))
     return {
-        "schema_version": 1,
-        "budget_tokens": None,
-        "usage": buckets,
-        "total_tokens": sum(buckets.values()),
+        "schema_version": 2,
+        "usage_unit": unit,
+        "budget": None,
+        "consumed": consumed,
+        "token_usage": buckets,
+        "credits": credits,
         "budget_exhausted": False,
         "session_count": 1 if session_started else 0,
         "model_request_count": request_count,
@@ -207,6 +220,10 @@ def _write_trace(
                         "cache_read_tokens": item.usage.cache_read_tokens,
                         "cache_write_tokens": item.usage.cache_write_tokens,
                         "total_tokens": item.usage.total_tokens,
+                        "credits": item.usage.credits,
+                        "usage_unit": (
+                            "credits" if item.usage.credits is not None else "provider_tokens"
+                        ),
                         "measurement": item.usage.measurement,
                     }
                 ),
@@ -228,6 +245,7 @@ def _write_trace(
             "backend": result.runtime_id,
             "session_id": result.session_id,
             "reasoning_effort": config.reasoning_effort,
+            "model": config.model,
             "runtime_bound": config.runtime_bound,
             "session_settings_sha256": hashlib.sha256(
                 config.session_settings.encode("utf-8")
@@ -248,6 +266,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
     session_started = False
     try:
         prompt = render_prompt(context, config)
+
         def run_provider(
             command: list[str],
             cwd: Path,
@@ -277,7 +296,8 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 timeout_s=config.agent_timeout_seconds,
                 reasoning_effort=config.reasoning_effort,
                 session_settings=config.session_settings,
-                token_budget=None,
+                model=config.model,
+                usage_budget=None,
                 environment=(
                     ("ATREX_EVOLUTION_INPUT", str(context.manifest_path)),
                     ("ATREX_EVOLUTION_CANDIDATE", str(context.candidate_root)),
@@ -295,7 +315,13 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             return result.exit_status
         validate_evolution_output(
             context.output_path,
-            expected_parent_revision_id=context.parent_revision_id,
+            active_revision_id=context.parent_revision_id,
+            visible_revision_ids=frozenset(item.revision_id for item in context.visible_agents),
+            historical_revision_ids=frozenset(
+                item.revision_id
+                for item in context.visible_agents
+                if item.relationship == "lineage_history"
+            ),
             max_bytes=config.max_output_manifest_bytes,
         )
         return 0

@@ -49,12 +49,14 @@ def test_runtime_binding_selects_every_supported_backend(
         repository,
         {
             "ATREX_AGENT_BACKEND": backend,
+            "ATREX_AGENT_MODEL": "runtime-model",
             "ATREX_AGENT_REASONING_EFFORT": "high",
             "ATREX_AGENT_SESSION_SETTINGS": "",
         },
     )
 
     assert config.agent_backend == backend
+    assert config.model == "runtime-model"
     assert config.agent_executable == backend
     assert config.reasoning_effort == "high"
     assert config.runtime_bound is True

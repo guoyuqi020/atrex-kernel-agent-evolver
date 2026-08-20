@@ -2,8 +2,9 @@
 
 English | [中文](README.zh.md)
 
-Atrex Kernel Agent Evolver is a separately versioned, fixed Agent Bundle that proposes one complete
-Optimizer-repository Challenger from one Runtime-authored Evolution workspace. It is not part of the
+Atrex Kernel Agent Evolver is a separately versioned, fixed Agent Bundle that proposes one
+Optimizer-repository Challenger from one Runtime-authored Evolution workspace. It may revise Active,
+reuse a visible historical revision unchanged, or revise a visible historical revision. It is not part of the
 Optimizer revision it edits, is never visible to an Optimizer Session, and has no Gateway, Wiki,
 evaluation, scheduling, retention, or promotion authority.
 
@@ -13,19 +14,23 @@ One invocation:
 2. reads the complete Parent repository, the read-only visible Agent revision catalog, and one
    strict, Epoch-organized Evidence view containing all completed branches, Kernel artifacts, and
    Agent selection outcomes;
-3. uses Runtime-injected read-only tools to query the frozen Agent/Kernel/Epoch history;
+3. uses Runtime-injected tools to query frozen Agent/Kernel/Epoch history and, when deriving from
+   history, atomically reset the writable Candidate to an eligible historical repository;
 4. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
-5. permits changes only in the writable complete Candidate repository;
+5. selects `evolved`, `reuse`, or `evolve_from_history`, permitting changes only in the writable
+   complete Candidate repository when a new revision is proposed and requiring the Runtime reset
+   operation for a historical base;
 6. emits an unredacted Session Artifact containing the rendered Prompt, captured raw Provider
    stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; and
-7. validates the Agent-authored `EvolutionOutputV2` before Runtime independently validates and seals
-   the Candidate.
+7. validates the tagged Agent-authored `EvolutionOutputV3` before Runtime independently validates
+   and seals the proposal.
 
 ## Agent backends
 
 Version 2 supports `claude`, `codex`, `qodercli`, and `pi` through fresh non-interactive CLI
 Adapters. The repository configuration supplies standalone defaults; Runtime injects the
-authoritative Backend, reasoning effort, and session settings for managed runs. Every Backend emits
+authoritative Backend, Lineage-selected model, reasoning effort, and session settings for managed
+runs. An empty model selects the Backend CLI default. Every Backend emits
 the same normalized trace and provider-token contract. There is no token cutoff: usage remains
 mandatory telemetry, while process wall time and output bounds remain safety limits. Every run
 publishes `TokenUsageReportV1` with a null budget; Codex usage and raw rollout capture are obtained

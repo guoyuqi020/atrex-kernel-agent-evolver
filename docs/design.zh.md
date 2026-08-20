@@ -26,12 +26,12 @@ run-<uuid>/
 │               ├── branches/ # Active 与所有 Challenger Attempt 历史
 │               ├── kernels/  # 精确 Kernel Artifact 与 index.json
 │               └── evolution/# 所有 Challenger 的 Evolver Trace
-├── runtime-tools/              # 只读 Runtime 持有的快照检索工具
+├── runtime-tools/              # 冻结的 Runtime 检索与 Candidate Reset 工具
 │   ├── evolver_tools.py
 │   ├── catalog.json        # 精确 vN/agent-vN Lineage Catalog
 │   └── kernels/            # 全部历史精确 Kernel Artifact
-├── candidate/                 # Parent 的完整可写副本
-└── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
+├── candidate/                 # 所选 Base 的完整可写副本
+└── scratch/                   # 可写 Report、Base 记录、Trace 与隔离 Agent 状态
 ```
 
 Runtime 路径校验与进程 Capability 是当前可信边界，Prompt 指令只是纵深防御。Evolver 不获得
@@ -60,19 +60,23 @@ Attempt 与权威 Outcome；`kernels/` 对每个被引用的精确 Kernel Artifa
 入口把环境路径绑定到
 Manifest，并拒绝 Link 与越界路径。Usage Report 目标是必需输入，但不接受 Token Budget。
 
-Runtime 还会在 `runtime-tools/` 下注入只读、限定快照的检索 Client 和 Catalog。Catalog 提供
+Runtime 还会在 `runtime-tools/` 下注入限定快照的检索与 Candidate 控制 Client 和 Catalog。Catalog 提供
 精确的 Lineage 内 Kernel/Agent 版本标签、Provenance、评测事实和每个历史 Kernel Artifact
 路径。Client 提供有界 JSON `history`、`branches`、`attempts`、`kernels`、`kernel-read`、
-`agents`、`agent-diff` 和 `trace-paths` 命令。它只读取本次冻结 Workspace，不授予 Registry、
-Gateway、Wiki、评测或晋升权限。
+`agents`、`agent-diff` 和 `trace-paths` 命令。唯一写操作
+`candidate-reset --base <agentrev>` 只接受 Manifest 中标为 `lineage_history` 的 Revision，先构造
+完整可写副本，再原子替换 `candidate/`，并在 `scratch/candidate-base.json` 记录 Base。它只使用
+本次冻结 Workspace，不授予 Registry、Gateway、Wiki、评测或晋升权限。
 
 Evidence 结构 Prompt Fragment 由 Runtime 编写和物化；本仓库只校验其固定路径与 Manifest 绑定的
 Digest，再拼入最终 Prompt。
 
-Coding Agent 输出 EvolutionOutputV2，包含 Parent 身份、Hypothesis、Expected Effect 和准确排序的
-Changed Paths。Runtime 仍是权威方：它独立 Hash Parent 与
-Candidate，校验真实修改集合和 Bundle Policy，封存来源，再运行配置的 Active/Challenger Pool
-评估。
+Coding Agent 输出带判别字段的 `EvolutionOutputV3`：可以从 Active 派生新 Revision、原样复用
+一个可见历史 Revision，或从一个可见历史 Revision 派生新 Revision。创建新 Revision 的提案包含
+相对于所选 Base 的准确排序 Changed Paths。Runtime 仍是权威方：它校验冻结可见范围，独立 Hash
+Candidate Base 记录必须与提案形态一致；随后独立 Hash Base 与 Candidate，校验真实修改集合和
+Bundle Policy，封存逐 Epoch 提案来源，再运行配置的
+Active/Challenger Pool 评估。Revision 父子关系仍是树；复用和晋升是参赛事件，不是祖先边。
 
 ## 4. Token 与进程所有权
 

@@ -26,12 +26,12 @@ run-<uuid>/
 │               ├── branches/ # Active and every Challenger Attempt history
 │               ├── kernels/  # exact Kernel artifacts plus index.json
 │               └── evolution/# every Challenger Evolver trace
-├── runtime-tools/              # read-only Runtime-owned snapshot inspection
+├── runtime-tools/              # frozen Runtime-owned inspection and Candidate reset
 │   ├── evolver_tools.py
 │   ├── catalog.json        # exact vN/agent-vN lineage catalog
 │   └── kernels/            # every historical exact Kernel artifact
-├── candidate/                 # writable complete copy of Parent
-└── scratch/                   # writable report, trace, and isolated Agent state
+├── candidate/                 # writable complete copy of selected base
+└── scratch/                   # writable report, base record, trace, and isolated Agent state
 ```
 
 Runtime path validation and process capabilities are the current trust boundary; Prompt instructions
@@ -65,20 +65,26 @@ authoritative outcome; `kernels/` materializes each referenced exact Kernel arti
 each environment path to that manifest and rejects
 links and path escapes. A usage-report destination is mandatory, but no token budget is accepted.
 
-Runtime also injects a read-only, snapshot-scoped inspection client and Catalog under
+Runtime also injects a snapshot-scoped inspection and Candidate-control client plus Catalog under
 `runtime-tools/`. The Catalog supplies exact Lineage-local Kernel and Agent version labels,
 provenance, evaluation facts, and paths to every historical Kernel Artifact. The client provides
 bounded JSON `history`, `branches`, `attempts`, `kernels`, `kernel-read`, `agents`, `agent-diff`, and
-`trace-paths` commands. It reads only this frozen workspace and confers no Registry, Gateway, Wiki,
-evaluation, or promotion authority.
+`trace-paths` commands. Its sole mutation, `candidate-reset --base <agentrev>`, accepts only a
+manifest entry marked `lineage_history`, stages a complete writable copy, atomically replaces
+`candidate/`, and records the selected base in `scratch/candidate-base.json`. It reads only this
+frozen workspace and confers no Registry, Gateway, Wiki, evaluation, or promotion authority.
 
 The Evidence structure Prompt Fragment is authored and materialized by Runtime. This repository
 only verifies its fixed path and Manifest-bound Digest before appending it to the final Prompt.
 
-The Coding Agent writes EvolutionOutputV2 with Parent identity, hypothesis, expected effect, and an
-exact sorted changed-path declaration. Runtime remains authoritative: it independently
-hashes Parent and Candidate, verifies the actual changed set and Bundle policy, seals provenance, and
-runs the configured Active-versus-Challenger-pool evaluation.
+The Coding Agent writes tagged `EvolutionOutputV3`. It may derive a new revision from Active,
+reuse one visible historical revision unchanged, or derive a new revision from one visible
+historical revision. New-revision proposals include an exact sorted changed-path declaration
+relative to the selected base. Runtime remains authoritative: it validates frozen visibility,
+requires the Candidate-base record to match the proposal mode, independently hashes Base and
+Candidate, verifies the actual changed set and Bundle policy, seals
+per-Epoch proposal provenance, and runs the configured Active-versus-Challenger-pool evaluation.
+Revision parentage remains a tree; reuse and promotion are participation events, not ancestry edges.
 
 ## 4. Token and process ownership
 

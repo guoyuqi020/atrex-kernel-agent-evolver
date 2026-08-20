@@ -43,7 +43,8 @@ selected Backend's credentials only through Runtime's explicit inherited-environ
 timeout must be greater than `agent_timeout_seconds` in `atrex-evolver.json` so the Bundle can reap
 its child first.
 
-Runtime binds Backend, reasoning effort, and Backend-specific session settings. The Evolver
+Runtime binds Backend, the Lineage-selected model, reasoning effort, and Backend-specific session
+settings. An empty model selects the Backend CLI default. The Evolver
 repository owns the Adapter implementation and versioned Prompt. Calling `src/main.py` without the exact Runtime manifest, paths,
 usage-report destination, and sentinel is expected to fail closed.
 
@@ -64,9 +65,13 @@ client. From the Evolution workspace, append one of these subcommands:
 <injected-python> runtime-tools/evolver_tools.py agents
 <injected-python> runtime-tools/evolver_tools.py agent-diff --base agentrev_<id> --candidate agentrev_<id>
 <injected-python> runtime-tools/evolver_tools.py trace-paths --epoch 1
+<injected-python> runtime-tools/evolver_tools.py candidate-reset --base agentrev_<historical-id>
 ```
 
-These commands query only the frozen local snapshot and return JSON; they do not contact Runtime.
+All commands use only the frozen local snapshot and return JSON; they do not contact Runtime.
+`candidate-reset` is the sole mutation: it is required for `evolve_from_history`, accepts only
+completed Lineage history, and atomically replaces only `candidate/` while recording its base.
 
-No `ATREX_TOKEN_BUDGET` is supplied. The usage report remains mandatory and uses
-`budget_tokens=null` and `budget_exhausted=false`; incomplete provider accounting fails the run.
+No usage budget is supplied. The schema-v2 usage report remains mandatory with `budget=null` and
+`budget_exhausted=false`. QoderCLI records credits; Claude, Codex, and Pi record provider tokens.
+Incomplete accounting in the selected provider-native unit fails the run.
