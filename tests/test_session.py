@@ -264,7 +264,6 @@ def _config(tmp_path: Path, executable: Path) -> EvolverConfig:
         session_settings="",
         prompt_path=prompt,
         agent_timeout_seconds=10,
-        max_stdout_chars=8192,
         max_stderr_chars=8192,
         max_output_manifest_bytes=4096,
         runtime_bound=True,

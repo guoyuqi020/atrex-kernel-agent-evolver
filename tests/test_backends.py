@@ -50,20 +50,22 @@ def test_structured_session_settings_cannot_override_runtime_model() -> None:
         CodexAdapter().build_command("prompt", "session", "high", '{"model":"other"}', "m")
 
 
-def test_provider_output_limits_are_configurable(tmp_path: Path) -> None:
+def test_provider_stderr_limit_is_configurable(tmp_path: Path) -> None:
     script = tmp_path / "large-output.py"
-    script.write_text("print('x' * 1000)\n", encoding="utf-8")
+    script.write_text(
+        "import sys\nprint('x' * 1000, file=sys.stderr)\n",
+        encoding="utf-8",
+    )
 
     result = run_bounded(
         [sys.executable, str(script)],
         cwd=tmp_path,
         timeout=10,
-        max_stdout_chars=32,
         max_stderr_chars=32,
     )
 
     assert result.output_overflow is True
-    assert len(result.stdout) <= 32
+    assert len(result.stderr) <= 32
 
 
 def test_codex_terminal_usage_uses_disjoint_cache_buckets() -> None:
@@ -126,22 +128,50 @@ def test_codex_installation_identity_is_a_writable_session_copy(tmp_path: Path) 
         assert temporary.close() is None
 
 
-def test_process_capture_is_bounded(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    import backends.process as process
-
-    monkeypatch.setattr(process, "MAX_CAPTURE_CHARS", 128)
+def test_process_stdout_capture_is_unbounded(tmp_path: Path) -> None:
     result = run_bounded(
         [sys.executable, "-c", "print('x' * 4096, flush=True)"],
         tmp_path,
         timeout=5,
     )
 
-    assert len(result.stdout) <= 128
+    assert len(result.stdout) == 4097
     assert result.stderr == ""
+    assert result.output_overflow is False
+    assert result.policy_diagnostics == ()
+    assert result.returncode == 0
+    assert result.timed_out is False
+
+
+def test_process_filters_thinking_token_events_before_stdout_capture(tmp_path: Path) -> None:
+    thinking = json.dumps({"type": "system", "subtype": "thinking_tokens"}) + "\n"
+    terminal = json.dumps({"type": "result", "usage": {"input_tokens": 3}}) + "\n"
+    payload = thinking * 1000 + terminal
+
+    result = run_bounded(
+        [sys.executable, "-c", f"import sys; sys.stdout.write({payload!r})"],
+        tmp_path,
+        timeout=5,
+    )
+
+    assert result.stdout == terminal
+    assert result.returncode == 0
+    assert result.output_overflow is False
+
+
+def test_process_stderr_capture_remains_bounded(
+    tmp_path: Path,
+) -> None:
+    result = run_bounded(
+        [sys.executable, "-c", "import sys; print('x' * 4096, file=sys.stderr, flush=True)"],
+        tmp_path,
+        timeout=5,
+        max_stderr_chars=128,
+    )
+
+    assert result.stdout == ""
+    assert len(result.stderr) <= 128
     assert result.output_overflow is True
-    assert "bounded capture limit" in result.policy_diagnostics[0]
+    assert "stderr exceeded the bounded capture limit" in result.policy_diagnostics[0]
     assert result.returncode != 0
     assert result.timed_out is False

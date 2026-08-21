@@ -435,7 +435,6 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 timeout,
                 env,
                 observer,
-                max_stdout_chars=config.max_stdout_chars,
                 max_stderr_chars=config.max_stderr_chars,
             )
 

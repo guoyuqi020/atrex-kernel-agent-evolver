@@ -22,7 +22,6 @@ def _repository(tmp_path: Path) -> Path:
                 "session_settings": "",
                 "prompt": "prompts/evolve.md",
                 "agent_timeout_seconds": 60,
-                "max_stdout_chars": 1000,
                 "max_stderr_chars": 1000,
                 "max_output_manifest_bytes": 4096,
             }

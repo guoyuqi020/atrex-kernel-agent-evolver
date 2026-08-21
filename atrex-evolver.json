@@ -6,7 +6,6 @@
   "session_settings": "",
   "prompt": "prompts/evolve.md",
   "agent_timeout_seconds": 1700,
-  "max_stdout_chars": 8388608,
   "max_stderr_chars": 8388608,
   "max_output_manifest_bytes": 16384
 }

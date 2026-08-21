@@ -62,7 +62,6 @@ class EvolverConfig:
     session_settings: str
     prompt_path: Path
     agent_timeout_seconds: int
-    max_stdout_chars: int
     max_stderr_chars: int
     max_output_manifest_bytes: int
     runtime_bound: bool = False
@@ -86,7 +85,6 @@ class EvolverConfig:
             "session_settings",
             "prompt",
             "agent_timeout_seconds",
-            "max_stdout_chars",
             "max_stderr_chars",
             "max_output_manifest_bytes",
         }
@@ -148,7 +146,6 @@ class EvolverConfig:
             agent_timeout_seconds=_positive_int(
                 value["agent_timeout_seconds"], "agent_timeout_seconds"
             ),
-            max_stdout_chars=_positive_int(value["max_stdout_chars"], "max_stdout_chars"),
             max_stderr_chars=_positive_int(value["max_stderr_chars"], "max_stderr_chars"),
             max_output_manifest_bytes=_positive_int(
                 value["max_output_manifest_bytes"], "max_output_manifest_bytes"

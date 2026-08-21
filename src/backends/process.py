@@ -13,14 +13,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from session_transcript import record_provider_line
+
 DEPENDENCY_GUARD_POLL_SECONDS = 0.25
 OUTPUT_READ_CHUNK_CHARS = 64 * 1024
-MAX_CAPTURE_CHARS = 8 * 1024 * 1024
+MAX_STDERR_CAPTURE_CHARS = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True)
 class ProcessResult:
-    """Raw bounded Provider streams plus separate trusted process diagnostics."""
+    """Filtered Provider stdout plus bounded stderr and trusted diagnostics."""
 
     stdout: str
     stderr: str
@@ -342,14 +344,14 @@ def run_bounded(
     env: dict[str, str] | None = None,
     observer: ProcessObserver | None = None,
     *,
-    max_stdout_chars: int | None = None,
     max_stderr_chars: int | None = None,
 ) -> ProcessResult:
     """Run a guarded command with live output observation and a wall deadline."""
-    max_stdout_chars = MAX_CAPTURE_CHARS if max_stdout_chars is None else max_stdout_chars
-    max_stderr_chars = MAX_CAPTURE_CHARS if max_stderr_chars is None else max_stderr_chars
-    if max_stdout_chars <= 0 or max_stderr_chars <= 0:
-        raise ValueError("Provider output limits must be positive")
+    max_stderr_chars = (
+        MAX_STDERR_CAPTURE_CHARS if max_stderr_chars is None else max_stderr_chars
+    )
+    if max_stderr_chars <= 0:
+        raise ValueError("Provider stderr limit must be positive")
     proc = subprocess.Popen(
         command,
         cwd=str(cwd),
@@ -371,37 +373,31 @@ def run_bounded(
     guard.start()
     timed_out = False
     observation_stop = threading.Event()
-    output_limit_exceeded = threading.Event()
+    stderr_limit_exceeded = threading.Event()
     stdout_parts: list[str] = []
     stderr_parts: list[str] = []
     reader_errors: list[BaseException] = []
 
     def read_stdout() -> None:
-        captured = 0
         pending = ""
+
+        def accept_complete_line(line: str) -> None:
+            if not record_provider_line(line):
+                return
+            stdout_parts.append(line)
+            if observer is not None and observer.on_stdout_line(line):
+                observation_stop.set()
+
         try:
             if proc.stdout is None:
                 return
             while chunk := proc.stdout.readline(OUTPUT_READ_CHUNK_CHARS):
-                remaining = max_stdout_chars - captured
-                if remaining <= 0:
-                    output_limit_exceeded.set()
-                    observation_stop.set()
-                    return
-                accepted = chunk[:remaining]
-                stdout_parts.append(accepted)
-                captured += len(accepted)
-                pending += accepted
+                pending += chunk
                 while "\n" in pending:
                     line, pending = pending.split("\n", 1)
-                    if observer is not None and observer.on_stdout_line(line + "\n"):
-                        observation_stop.set()
-                if len(chunk) > remaining:
-                    output_limit_exceeded.set()
-                    observation_stop.set()
-                    return
-            if pending and observer is not None and observer.on_stdout_line(pending):
-                observation_stop.set()
+                    accept_complete_line(line + "\n")
+            if pending:
+                accept_complete_line(pending)
         except BaseException as error:
             reader_errors.append(error)
 
@@ -413,7 +409,7 @@ def run_bounded(
             while chunk := proc.stderr.readline(OUTPUT_READ_CHUNK_CHARS):
                 remaining = max_stderr_chars - captured
                 if remaining <= 0:
-                    output_limit_exceeded.set()
+                    stderr_limit_exceeded.set()
                     observation_stop.set()
                     return
                 stderr_parts.append(chunk[:remaining])
@@ -422,7 +418,7 @@ def run_bounded(
                 if observer is not None and observer.on_stderr_line(accepted):
                     observation_stop.set()
                 if len(chunk) > remaining:
-                    output_limit_exceeded.set()
+                    stderr_limit_exceeded.set()
                     observation_stop.set()
                     return
         except BaseException as error:
@@ -476,8 +472,8 @@ def run_bounded(
     stderr = "".join(stderr_parts)
     returncode = proc.returncode
     policy_diagnostics: list[str] = []
-    if output_limit_exceeded.is_set():
-        policy_diagnostics.append("Agent output exceeded the bounded capture limit")
+    if stderr_limit_exceeded.is_set():
+        policy_diagnostics.append("Agent stderr exceeded the bounded capture limit")
         if returncode == 0:
             returncode = 126
     if dependency_violations:
@@ -492,6 +488,6 @@ def run_bounded(
         stderr=stderr or "",
         returncode=returncode,
         timed_out=timed_out,
-        output_overflow=output_limit_exceeded.is_set(),
+        output_overflow=stderr_limit_exceeded.is_set(),
         policy_diagnostics=tuple(policy_diagnostics),
     )
