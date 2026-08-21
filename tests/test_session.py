@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import subprocess
+import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -206,6 +208,46 @@ print(json.dumps({
     return script
 
 
+def _blocking_claude(tmp_path: Path) -> tuple[Path, Path, Path]:
+    script = tmp_path / "blocking-claude"
+    ready = tmp_path / "provider-ready"
+    release = tmp_path / "provider-release"
+    script.write_text(
+        f"""#!/usr/bin/env python3
+import json
+import os
+import time
+from pathlib import Path
+
+print(json.dumps({{"type": "assistant", "live": "first provider event"}}), flush=True)
+Path({str(ready)!r}).write_text("ready")
+while not Path({str(release)!r}).exists():
+    time.sleep(0.01)
+candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
+(candidate / "prompts").mkdir(exist_ok=True)
+(candidate / "prompts/evolve-result.md").write_text("live policy\\n")
+manifest = json.loads(Path(os.environ["ATREX_EVOLUTION_INPUT"]).read_text())
+Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({{
+    "schema_version": 3,
+    "proposal_type": "evolved",
+    "base_revision_id": manifest["parent_revision_id"],
+    "hypothesis": "Stream the Evolver trace while it runs.",
+    "expected_effect": "Make active evolution sessions inspectable.",
+    "changed_paths": ["prompts/evolve-result.md"],
+}}))
+print(json.dumps({{"type": "result", "usage": {{
+    "input_tokens": 1,
+    "output_tokens": 1,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+}}}}), flush=True)
+""",
+        encoding="utf-8",
+    )
+    os.chmod(script, 0o700)
+    return script, ready, release
+
+
 def _config(tmp_path: Path, executable: Path) -> EvolverConfig:
     prompt = tmp_path / "prompt.md"
     prompt.write_text("Fixed evolution instructions.\n")
@@ -276,6 +318,78 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
         "version": 0,
     }
     assert all(json.loads(line)["ignorable"] is True for line in normalized[1:])
+
+
+def test_session_trace_is_visible_while_evolver_is_running(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    executable, ready, release = _blocking_claude(tmp_path)
+    result: list[int] = []
+    errors: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            result.append(execute(context, _config(tmp_path, executable)))
+        except BaseException as error:
+            errors.append(error)
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    deadline = time.monotonic() + 5
+    while not ready.is_file() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert ready.is_file()
+    trace = context.session_trace_path
+    assert (trace / ".runtime-live-session").read_text() == "unsealed\n"
+    running = json.loads((trace / "session.json").read_text())
+    assert running["state"] == "running"
+    assert running["conversation_capture_complete"] is False
+    assert "first provider event" in (trace / "provider/stdout.stream-json").read_text()
+    assert "first provider event" in (trace / "conversation.jsonl").read_text()
+
+    release.write_text("continue")
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert errors == []
+    assert result == [0]
+    assert not (trace / ".runtime-live-session").exists()
+    finished = json.loads((trace / "session.json").read_text())
+    assert finished["state"] == "finished"
+    assert finished["conversation_capture_complete"] is True
+
+
+def test_session_trace_retains_partial_output_after_runner_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+
+    def fail_runner(
+        command: list[str],
+        cwd: Path,
+        timeout: int | None,
+        env: dict[str, str] | None = None,
+        observer: object | None = None,
+        **_kwargs: object,
+    ) -> object:
+        del command, cwd, timeout, env
+        assert observer is not None
+        observer.on_stdout_line('{"type":"assistant","partial":true}\n')
+        raise RuntimeError("provider transport failed")
+
+    monkeypatch.setattr("session.backends.run_bounded", fail_runner)
+    with pytest.raises(RuntimeError, match="provider transport failed"):
+        execute(context, _config(tmp_path, Path("/bin/false")))
+
+    trace = context.session_trace_path
+    assert (trace / ".runtime-live-session").is_file()
+    assert '"partial":true' in (trace / "provider/stdout.stream-json").read_text()
+    session = json.loads((trace / "session.json").read_text())
+    assert session["state"] == "interrupted"
+    assert session["error_type"] == "RuntimeError"
+    assert session["conversation_capture_complete"] is False
+    conversation = (trace / "conversation.jsonl").read_text()
+    assert '"partial": true' in conversation
+    assert '"state": "interrupted"' in conversation
 
 
 def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:

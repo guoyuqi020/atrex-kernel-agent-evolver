@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sys
 import tempfile
+import uuid
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -14,7 +16,9 @@ import backends
 from config import EvolverConfig
 from context import EvolutionContext
 from report import validate_evolution_output
-from session_transcript import render_conversation
+from session_transcript import encode_records, initial_records, render_conversation
+
+_LIVE_TRACE_MARKER = ".runtime-live-session"
 
 
 def atomic_bytes(path: Path, payload: bytes) -> None:
@@ -150,11 +154,120 @@ def _usage_report(
     }
 
 
+def _start_live_trace(
+    context: EvolutionContext,
+    prompt: str,
+    *,
+    runtime_id: str,
+    session_id: str,
+    config: EvolverConfig,
+) -> None:
+    """Create the inspectable Session projection before the Provider starts."""
+    if (
+        context.scratch_root.is_symlink()
+        or not context.scratch_root.is_dir()
+        or context.scratch_root.resolve() != context.session_trace_path.parent
+    ):
+        raise ValueError("Evolution scratch changed before launch validation")
+    trace_root = context.session_trace_path
+    if trace_root.exists() or trace_root.is_symlink():
+        raise ValueError("Session trace path must not be created by the Coding Agent")
+    trace_root.mkdir(mode=0o700)
+    atomic_text(trace_root / _LIVE_TRACE_MARKER, "unsealed\n")
+    atomic_text(trace_root / "input/prompt.md", prompt)
+    atomic_text(
+        trace_root / "conversation.jsonl",
+        encode_records(
+            initial_records(
+                backend=runtime_id,
+                session_id=session_id,
+                prompt=prompt,
+            )
+        ),
+    )
+    atomic_text(trace_root / "provider/stdout.stream-json", "")
+    atomic_text(trace_root / "provider/stderr.log", "")
+    if runtime_id == "codex":
+        atomic_bytes(trace_root / "provider/codex-rollout.raw-jsonl", b"")
+    atomic_json(
+        trace_root / "session.json",
+        {
+            "schema_version": 1,
+            "backend": runtime_id,
+            "session_id": session_id,
+            "reasoning_effort": config.reasoning_effort,
+            "model": config.model,
+            "runtime_bound": config.runtime_bound,
+            "session_settings_sha256": hashlib.sha256(
+                config.session_settings.encode("utf-8")
+            ).hexdigest(),
+            "state": "running",
+            "raw_provider_capture_complete": False,
+            "conversation_capture_complete": False,
+            "provider_system_prompt_capture": "provider_managed_unavailable",
+        },
+    )
+
+
+def _mark_live_trace_interrupted(
+    context: EvolutionContext,
+    error: BaseException,
+) -> None:
+    """Seal the available partial projection after a catchable interruption."""
+    trace_root = context.session_trace_path
+    marker = trace_root / _LIVE_TRACE_MARKER
+    if (
+        trace_root.is_symlink()
+        or not trace_root.is_dir()
+        or marker.is_symlink()
+        or not marker.is_file()
+    ):
+        return
+    try:
+        session_path = trace_root / "session.json"
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        if not isinstance(session, dict):
+            session = {}
+        session["state"] = "interrupted"
+        session["error_type"] = type(error).__name__
+        session["raw_provider_capture_complete"] = False
+        session["conversation_capture_complete"] = False
+        prompt = (trace_root / "input/prompt.md").read_text(encoding="utf-8")
+        stdout = (trace_root / "provider/stdout.stream-json").read_text(encoding="utf-8")
+        raw_provider_files = tuple(
+            (path.relative_to(trace_root).as_posix(), path.read_bytes())
+            for path in sorted((trace_root / "provider").rglob("*"))
+            if path.is_file()
+            and path.name not in {"stdout.stream-json", "stderr.log"}
+            and not path.is_symlink()
+        )
+        atomic_text(
+            trace_root / "conversation.jsonl",
+            render_conversation(
+                backend=str(session.get("backend", "unknown")),
+                session_id=str(session.get("session_id", "unknown")),
+                prompt=prompt,
+                stdout=stdout,
+                raw_provider_files=raw_provider_files,
+                state="interrupted",
+                exit_status=None,
+                timed_out=None,
+                raw_provider_capture_complete=False,
+                error_type=type(error).__name__,
+            ),
+        )
+        atomic_json(session_path, session)
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return
+
+
 def _write_trace(
     context: EvolutionContext,
     result: backends.AgentRunResult,
     prompt: str,
     config: EvolverConfig,
+    *,
+    replace_live: bool = False,
 ) -> None:
     """Retain the unredacted Session input and raw captured Provider streams."""
     if (
@@ -163,20 +276,20 @@ def _write_trace(
         or context.scratch_root.resolve() != context.session_trace_path.parent
     ):
         raise ValueError("Evolution scratch changed after launch validation")
-    if context.session_trace_path.exists() or context.session_trace_path.is_symlink():
-        raise ValueError("Session trace path must not be created by the Coding Agent")
-    context.session_trace_path.mkdir(mode=0o700)
-    atomic_text(context.session_trace_path / "input/prompt.md", prompt)
-    atomic_text(
-        context.session_trace_path / "provider/stdout.stream-json",
-        result.stdout,
-    )
-    atomic_text(
-        context.session_trace_path / "provider/stderr.log",
-        result.stderr,
-    )
+    trace_root = context.session_trace_path
+    if trace_root.exists() or trace_root.is_symlink():
+        marker = trace_root / _LIVE_TRACE_MARKER
+        if (
+            not replace_live
+            or trace_root.is_symlink()
+            or not trace_root.is_dir()
+            or marker.is_symlink()
+            or not marker.is_file()
+        ):
+            raise ValueError("Session trace path must not be created by the Coding Agent")
+    raw_files: list[tuple[PurePosixPath, bytes]] = []
+    raw_paths: set[str] = set()
     reserved = {"provider/stdout.stream-json", "provider/stderr.log"}
-    written: set[str] = set()
     for raw_file in result.raw_session_files:
         relative = PurePosixPath(raw_file.relative_path)
         normalized = relative.as_posix()
@@ -187,11 +300,25 @@ def _write_trace(
             or not relative.parts
             or relative.parts[0] != "provider"
             or normalized in reserved
-            or normalized in written
+            or normalized in raw_paths
         ):
             raise ValueError("Raw Provider Session file has an unsafe path")
-        written.add(normalized)
-        atomic_bytes(context.session_trace_path.joinpath(*relative.parts), raw_file.payload)
+        raw_paths.add(normalized)
+        raw_files.append((relative, raw_file.payload))
+    if trace_root.exists():
+        shutil.rmtree(trace_root)
+    trace_root.mkdir(mode=0o700)
+    atomic_text(context.session_trace_path / "input/prompt.md", prompt)
+    atomic_text(
+        context.session_trace_path / "provider/stdout.stream-json",
+        result.stdout,
+    )
+    atomic_text(
+        context.session_trace_path / "provider/stderr.log",
+        result.stderr,
+    )
+    for relative, payload in raw_files:
+        atomic_bytes(context.session_trace_path.joinpath(*relative.parts), payload)
     atomic_text(
         context.session_trace_path / "conversation.jsonl",
         render_conversation(
@@ -199,10 +326,7 @@ def _write_trace(
             session_id=result.session_id,
             prompt=prompt,
             stdout=result.stdout,
-            raw_provider_files=(
-                (raw_file.relative_path, raw_file.payload)
-                for raw_file in result.raw_session_files
-            ),
+            raw_provider_files=((path.as_posix(), payload) for path, payload in raw_files),
             state="finished",
             exit_status=result.exit_status,
             timed_out=result.timed_out,
@@ -268,6 +392,7 @@ def _write_trace(
             "session_settings_sha256": hashlib.sha256(
                 config.session_settings.encode("utf-8")
             ).hexdigest(),
+            "state": "finished",
             "returncode": result.exit_status,
             "timed_out": result.timed_out,
             "raw_provider_capture_complete": result.raw_provider_capture_complete,
@@ -284,6 +409,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
     """Run one Agent, validate its annotation, and always publish provider usage."""
     result: backends.AgentRunResult | None = None
     session_started = False
+    live_trace = False
     try:
         prompt = render_prompt(context, config)
 
@@ -308,6 +434,15 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             config.agent_backend,
             process_runner=run_provider,
         )
+        session_id = str(uuid.uuid4())
+        _start_live_trace(
+            context,
+            prompt,
+            runtime_id=runtime.id,
+            session_id=session_id,
+            config=config,
+        )
+        live_trace = True
         session_started = True
         result = runtime.run(
             backends.AgentRunRequest(
@@ -315,9 +450,11 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 prompt=prompt,
                 timeout_s=config.agent_timeout_seconds,
                 reasoning_effort=config.reasoning_effort,
+                session_id=session_id,
                 session_settings=config.session_settings,
                 model=config.model,
                 usage_budget=None,
+                live_trace_path=context.session_trace_path,
                 environment=(
                     ("ATREX_EVOLUTION_INPUT", str(context.manifest_path)),
                     ("ATREX_EVOLUTION_CANDIDATE", str(context.candidate_root)),
@@ -326,7 +463,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 ),
             )
         )
-        _write_trace(context, result, prompt, config)
+        _write_trace(context, result, prompt, config, replace_live=live_trace)
         if not result.raw_provider_capture_complete:
             return 126
         if result.timed_out:
@@ -345,6 +482,10 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             max_bytes=config.max_output_manifest_bytes,
         )
         return 0
+    except BaseException as error:
+        if live_trace:
+            _mark_live_trace_interrupted(context, error)
+        raise
     finally:
         atomic_json(
             context.token_usage_path,

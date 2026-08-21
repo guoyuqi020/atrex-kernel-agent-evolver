@@ -48,11 +48,13 @@ settings. An empty model selects the Backend CLI default. The Evolver
 repository owns the Adapter implementation and versioned Prompt. Calling `src/main.py` without the exact Runtime manifest, paths,
 usage-report destination, and sentinel is expected to fail closed.
 
-On every started Agent session, `scratch/evolver-session/` contains the unredacted rendered Prompt
-under `input/`, captured raw Provider stdout/stderr under `provider/`, a complete observable
-`conversation.jsonl`, plus `events.jsonl` and `session.json` as normalized accounting and completion
-metadata. Runtime seals this entire directory
-as the Session Artifact.
+Every Agent session creates `scratch/evolver-session/` before the Provider starts. The unredacted
+Prompt, raw Provider stdout/stderr, and `conversation.jsonl` are inspectable and updated while the
+session runs. `session.json` reports `state: running` until completion; the
+`.runtime-live-session` marker identifies an unsealed or interrupted projection. On normal exit the
+Bundle replaces the projection with the complete transcript, normalized `events.jsonl`, and final
+`session.json`, then Runtime seals the directory as the Session Artifact. A catchable failure keeps
+the available partial transcript with `state: interrupted`.
 
 The rendered Session context contains the exact Python command for the Runtime-injected inspection
 client. From the Evolution workspace, append one of these subcommands:
