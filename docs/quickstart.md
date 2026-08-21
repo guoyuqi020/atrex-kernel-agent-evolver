@@ -49,8 +49,9 @@ repository owns the Adapter implementation and versioned Prompt. Calling `src/ma
 usage-report destination, and sentinel is expected to fail closed.
 
 On every started Agent session, `scratch/evolver-session/` contains the unredacted rendered Prompt
-under `input/`, captured raw Provider stdout/stderr under `provider/`, plus `events.jsonl` and
-`session.json` as normalized accounting and completion metadata. Runtime seals this entire directory
+under `input/`, captured raw Provider stdout/stderr under `provider/`, a complete observable
+`conversation.jsonl`, plus `events.jsonl` and `session.json` as normalized accounting and completion
+metadata. Runtime seals this entire directory
 as the Session Artifact.
 
 The rendered Session context contains the exact Python command for the Runtime-injected inspection

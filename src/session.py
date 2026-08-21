@@ -14,6 +14,7 @@ import backends
 from config import EvolverConfig
 from context import EvolutionContext
 from report import validate_evolution_output
+from session_transcript import render_conversation
 
 
 def atomic_bytes(path: Path, payload: bytes) -> None:
@@ -191,6 +192,23 @@ def _write_trace(
             raise ValueError("Raw Provider Session file has an unsafe path")
         written.add(normalized)
         atomic_bytes(context.session_trace_path.joinpath(*relative.parts), raw_file.payload)
+    atomic_text(
+        context.session_trace_path / "conversation.jsonl",
+        render_conversation(
+            backend=result.runtime_id,
+            session_id=result.session_id,
+            prompt=prompt,
+            stdout=result.stdout,
+            raw_provider_files=(
+                (raw_file.relative_path, raw_file.payload)
+                for raw_file in result.raw_session_files
+            ),
+            state="finished",
+            exit_status=result.exit_status,
+            timed_out=result.timed_out,
+            raw_provider_capture_complete=result.raw_provider_capture_complete,
+        ),
+    )
     normalized_events: list[dict[str, Any]] = [
         {
             "type": "session",
@@ -253,6 +271,8 @@ def _write_trace(
             "returncode": result.exit_status,
             "timed_out": result.timed_out,
             "raw_provider_capture_complete": result.raw_provider_capture_complete,
+            "conversation_capture_complete": result.raw_provider_capture_complete,
+            "provider_system_prompt_capture": "provider_managed_unavailable",
             "observation_errors": list(result.observation_errors),
             "policy_diagnostics": list(result.policy_diagnostics),
             "budget_exhausted": False,

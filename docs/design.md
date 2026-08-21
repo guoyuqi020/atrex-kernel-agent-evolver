@@ -98,7 +98,10 @@ request lacks complete provider buckets.
 
 The Session Artifact preserves the final rendered Prompt at `input/prompt.md`, the captured Provider
 stream at `provider/stdout.stream-json`, and captured Provider stderr at
-`provider/stderr.log`. Runtime and Evolver apply no redaction, event selection, or text rewriting to
+`provider/stderr.log`. `conversation.jsonl` combines the exact Runtime input, every captured
+Provider stdout event, any raw Codex rollout, and the terminal capture status. It explicitly marks
+Provider-managed system instructions unavailable when the CLI does not export them. Runtime and
+Evolver apply no redaction, event selection, or text rewriting to
 those files. Reasoning, tool arguments and results, credentials, or other sensitive fields emitted
 by the Provider therefore remain present. `events.jsonl` is an additional normalized usage index;
 `session.json` records termination state and whether raw Provider capture avoided truncation. The

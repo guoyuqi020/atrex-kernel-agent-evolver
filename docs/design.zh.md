@@ -89,7 +89,9 @@ SIGTERM/SIGINT 会转发给该进程组，Timeout 与 stdout/stderr 均受限。
 
 Session Artifact 把最终渲染 Prompt 原样保存到 `input/prompt.md`，把捕获的 Provider Stream
 保存到 `provider/stdout.stream-json`，并把 Provider stderr 保存到
-`provider/stderr.log`。Runtime 与 Evolver 不对这些文件做脱敏、Event 筛选或文本
+`provider/stderr.log`。`conversation.jsonl` 合并准确 Runtime 输入、每条 Provider stdout
+Event、Codex 原始 Rollout（如有）和捕获终态。CLI 未导出的 Provider 内置 System Prompt 会被
+明确标记为不可获取。Runtime 与 Evolver 不对这些文件做脱敏、Event 筛选或文本
 改写；Provider 输出的 Reasoning、Tool 参数与结果、Credential 或其他敏感字段因此会原样
 保留。`events.jsonl` 只是额外的标准化 Usage 索引；`session.json` 记录终止状态以及原始
 Provider 捕获是否避免了截断。配置的 stdout/stderr 限制仍是安全上限：超限会使 Session 失败并

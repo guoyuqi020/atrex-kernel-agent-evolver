@@ -48,7 +48,8 @@ Adapter 实现和版本化 Prompt。
 
 每次 Agent Session 启动后，`scratch/evolver-session/` 会在 `input/` 下保存未脱敏的最终
 渲染 Prompt，在 `provider/` 下保存捕获的原始 Provider stdout/stderr，并使用
-`events.jsonl` 和 `session.json` 保存标准化计量与完整性元数据。Runtime 会把整个
+`conversation.jsonl` 保存完整可观测 Transcript，使用 `events.jsonl` 和 `session.json` 保存
+标准化计量与完整性元数据。Runtime 会把整个
 目录封存为 Session Artifact。
 
 渲染后的 Session Context 包含 Runtime 注入检索 Client 的精确 Python 命令。在 Evolution

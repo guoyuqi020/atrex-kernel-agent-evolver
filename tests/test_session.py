@@ -245,6 +245,19 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
     assert "raw-tool-secret" in provider_stdout
     assert "raw tool result" in provider_stdout
     assert "Bearer raw-provider-secret" in provider_stdout
+    conversation = [
+        json.loads(line)
+        for line in (context.session_trace_path / "conversation.jsonl").read_text().splitlines()
+    ]
+    assert conversation[0]["type"] == "session_start"
+    assert conversation[0]["provider_system_prompt"]["captured"] is False
+    assert conversation[1]["role"] == "user"
+    assert "Fixed evolution instructions." in conversation[1]["content"][0]["text"]
+    assert any(
+        row.get("event", {}).get("provider_credential") == "Bearer raw-provider-secret"
+        for row in conversation
+    )
+    assert conversation[-1]["type"] == "session_end"
     assert (
         "raw stderr credential" in (context.session_trace_path / "provider/stderr.log").read_text()
     )
@@ -254,6 +267,8 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
     assert session["model"] == "lineage-model"
     assert session["runtime_bound"] is True
     assert session["raw_provider_capture_complete"] is True
+    assert session["conversation_capture_complete"] is True
+    assert session["provider_system_prompt_capture"] == "provider_managed_unavailable"
     normalized = (context.session_trace_path / "events.jsonl").read_text().splitlines()
     assert json.loads(normalized[0]) == {
         "id": "epoch:test:challenger",
