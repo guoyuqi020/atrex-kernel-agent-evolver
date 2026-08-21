@@ -13,6 +13,9 @@ not historical bases and cannot be selected again in the same Epoch.
 
 The goal is to improve the Agent's ability to discover a faster correct Kernel for the given DSL.
 This is Agent engineering, not Kernel implementation work.
+Actively eliminate redundant Harness design, duplicated instructions, and workflow steps that do
+not contribute to the selected hypothesis, while preserving required Bundle protocols, Runtime tool
+contracts, evidence handling, and safety boundaries.
 
 # Binding DSL constraint
 

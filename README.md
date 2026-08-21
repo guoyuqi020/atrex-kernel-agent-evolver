@@ -20,8 +20,9 @@ One invocation:
 5. selects `evolved`, `reuse`, or `evolve_from_history`, permitting changes only in the writable
    complete Candidate repository when a new revision is proposed and requiring the Runtime reset
    operation for a historical base;
-6. emits an unredacted Session Artifact containing the rendered Prompt, captured raw Provider
-   stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; and
+6. emits an unredacted Session Artifact containing the rendered Prompt, retained Provider
+   stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; the
+   high-frequency Claude `system/thinking_tokens` estimate event is intentionally omitted; and
 7. validates the tagged Agent-authored `EvolutionOutputV3` before Runtime independently validates
    and seals the proposal.
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from backends.process import ProcessObserver
 from config import EvolverConfig
 from context import LAUNCH_SENTINEL, EvolutionContext
 from session import execute, render_prompt
@@ -133,6 +134,11 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "expected_effect": "Reduce repeated failed optimization directions.",
     "changed_paths": ["prompts/evolve-result.md"],
 }))
+print(json.dumps({
+    "type": "system",
+    "subtype": "thinking_tokens",
+    "estimated_tokens": 18479,
+}), flush=True)
 print(json.dumps({
     "type": "assistant",
     "provider_credential": "Bearer raw-provider-secret",
@@ -287,6 +293,7 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
     assert "raw-tool-secret" in provider_stdout
     assert "raw tool result" in provider_stdout
     assert "Bearer raw-provider-secret" in provider_stdout
+    assert "thinking_tokens" not in provider_stdout
     conversation = [
         json.loads(line)
         for line in (context.session_trace_path / "conversation.jsonl").read_text().splitlines()
@@ -300,6 +307,7 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
         for row in conversation
     )
     assert conversation[-1]["type"] == "session_end"
+    assert all(row.get("subtype") != "thinking_tokens" for row in conversation)
     assert (
         "raw stderr credential" in (context.session_trace_path / "provider/stderr.log").read_text()
     )
@@ -311,6 +319,7 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
     assert session["raw_provider_capture_complete"] is True
     assert session["conversation_capture_complete"] is True
     assert session["provider_system_prompt_capture"] == "provider_managed_unavailable"
+    assert session["provider_event_filters"] == ["system/thinking_tokens"]
     normalized = (context.session_trace_path / "events.jsonl").read_text().splitlines()
     assert json.loads(normalized[0]) == {
         "id": "epoch:test:challenger",
@@ -368,7 +377,7 @@ def test_session_trace_retains_partial_output_after_runner_failure(
         cwd: Path,
         timeout: int | None,
         env: dict[str, str] | None = None,
-        observer: object | None = None,
+        observer: ProcessObserver | None = None,
         **_kwargs: object,
     ) -> object:
         del command, cwd, timeout, env
@@ -404,6 +413,7 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "# Binding DSL constraint" in prompt
     assert "authoritative and immutable" in prompt
     assert "Do not redirect the Optimizer to another DSL" in prompt
+    assert "Actively eliminate redundant Harness design" in prompt
     assert EVIDENCE_PROMPT.rstrip() in prompt
     assert '"dsl": "triton"' in prompt
     assert "gateway" not in prompt.lower().split("# session context", 1)[1]

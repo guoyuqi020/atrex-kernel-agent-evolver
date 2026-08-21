@@ -47,11 +47,12 @@ Adapter 实现和版本化 Prompt。
 缺少准确 Runtime Manifest、路径、Usage Report 目标或 Sentinel 时直接调用 `src/main.py` 必须失败关闭。
 
 每次 Agent Session 都会在 Provider 启动前创建 `scratch/evolver-session/`。运行期间可以
-实时查看未脱敏 Prompt、原始 Provider stdout/stderr 和持续追加的 `conversation.jsonl`；
+实时查看未脱敏 Prompt、保留的 Provider stdout/stderr 和持续追加的 `conversation.jsonl`；
 此时 `session.json` 为 `state: running`，`.runtime-live-session` 表示尚未封存或已被中断。
-正常退出后 Bundle 会用完整 Transcript、标准化 `events.jsonl` 和最终 `session.json` 替换
+正常退出后 Bundle 会用保留事件 Transcript、标准化 `events.jsonl` 和最终 `session.json` 替换
 实时投影，再由 Runtime 把整个目录封存为 Session Artifact。可捕获异常会保留已有的部分
-Transcript，并标记为 `state: interrupted`。
+Transcript，并标记为 `state: interrupted`。高频 Claude `system/thinking_tokens` 估算事件会被
+省略，并在 `session.json.provider_event_filters` 中声明。
 
 渲染后的 Session Context 包含 Runtime 注入检索 Client 的精确 Python 命令。在 Evolution
 Workspace 中可追加以下子命令：

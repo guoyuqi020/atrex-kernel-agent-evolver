@@ -49,12 +49,14 @@ repository owns the Adapter implementation and versioned Prompt. Calling `src/ma
 usage-report destination, and sentinel is expected to fail closed.
 
 Every Agent session creates `scratch/evolver-session/` before the Provider starts. The unredacted
-Prompt, raw Provider stdout/stderr, and `conversation.jsonl` are inspectable and updated while the
+Prompt, retained Provider stdout/stderr, and `conversation.jsonl` are inspectable and updated while the
 session runs. `session.json` reports `state: running` until completion; the
 `.runtime-live-session` marker identifies an unsealed or interrupted projection. On normal exit the
-Bundle replaces the projection with the complete transcript, normalized `events.jsonl`, and final
+Bundle replaces the projection with the retained-event transcript, normalized `events.jsonl`, and final
 `session.json`, then Runtime seals the directory as the Session Artifact. A catchable failure keeps
-the available partial transcript with `state: interrupted`.
+the available partial transcript with `state: interrupted`. The high-frequency Claude
+`system/thinking_tokens` estimate event is omitted and declared in
+`session.json.provider_event_filters`.
 
 The rendered Session context contains the exact Python command for the Runtime-injected inspection
 client. From the Evolution workspace, append one of these subcommands:

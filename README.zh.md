@@ -18,8 +18,9 @@ Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、
 4. 使用仓库内固定 Prompt 启动一次全新的非交互 Coding Agent；
 5. 从 `evolved`、`reuse`、`evolve_from_history` 中选择一种；需要创建新 Revision 时，只允许修改
    可写的完整 Candidate 仓库，且历史 Base 必须通过 Runtime Reset 操作加载；
-6. 输出未脱敏 Session Artifact，其中包含最终渲染 Prompt、原始 Provider
-   stdout/stderr、标准化 Usage 索引和严格 Provider Token Report；
+6. 输出未脱敏 Session Artifact，其中包含最终渲染 Prompt、保留的 Provider
+   stdout/stderr、标准化 Usage 索引和严格 Provider Token Report；高频 Claude
+   `system/thinking_tokens` 估算事件会被有意省略；
 7. 先校验带判别字段的 `EvolutionOutputV3`，再交给 Runtime 独立验证和封存提案。
 
 ## Agent Backend

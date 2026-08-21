@@ -16,7 +16,13 @@ import backends
 from config import EvolverConfig
 from context import EvolutionContext
 from report import validate_evolution_output
-from session_transcript import encode_records, initial_records, render_conversation
+from session_transcript import (
+    FILTERED_PROVIDER_EVENTS,
+    encode_records,
+    filter_provider_stdout,
+    initial_records,
+    render_conversation,
+)
 
 _LIVE_TRACE_MARKER = ".runtime-live-session"
 
@@ -205,6 +211,7 @@ def _start_live_trace(
             "raw_provider_capture_complete": False,
             "conversation_capture_complete": False,
             "provider_system_prompt_capture": "provider_managed_unavailable",
+            "provider_event_filters": list(FILTERED_PROVIDER_EVENTS),
         },
     )
 
@@ -308,10 +315,11 @@ def _write_trace(
     if trace_root.exists():
         shutil.rmtree(trace_root)
     trace_root.mkdir(mode=0o700)
+    filtered_stdout = filter_provider_stdout(result.stdout)
     atomic_text(context.session_trace_path / "input/prompt.md", prompt)
     atomic_text(
         context.session_trace_path / "provider/stdout.stream-json",
-        result.stdout,
+        filtered_stdout,
     )
     atomic_text(
         context.session_trace_path / "provider/stderr.log",
@@ -325,7 +333,7 @@ def _write_trace(
             backend=result.runtime_id,
             session_id=result.session_id,
             prompt=prompt,
-            stdout=result.stdout,
+            stdout=filtered_stdout,
             raw_provider_files=((path.as_posix(), payload) for path, payload in raw_files),
             state="finished",
             exit_status=result.exit_status,
@@ -398,6 +406,7 @@ def _write_trace(
             "raw_provider_capture_complete": result.raw_provider_capture_complete,
             "conversation_capture_complete": result.raw_provider_capture_complete,
             "provider_system_prompt_capture": "provider_managed_unavailable",
+            "provider_event_filters": list(FILTERED_PROVIDER_EVENTS),
             "observation_errors": list(result.observation_errors),
             "policy_diagnostics": list(result.policy_diagnostics),
             "budget_exhausted": False,
