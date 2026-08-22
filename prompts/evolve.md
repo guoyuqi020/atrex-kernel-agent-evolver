@@ -72,6 +72,11 @@ Lineage snapshot:
 - `kernel-read --revision <kernelrev> [--file <path>]`: one Kernel's catalog record, source-file
   index, or exact source content. The catalog record can connect a best Kernel revision found by
   `history` or `branches` to its producing Attempt and Agent;
+- `kernel-trials [--epoch <n>] [--decision revert]`: unversioned candidate snapshots observed by
+  Gateway operations, including measured candidates that the Optimizer later reverted;
+- `kernel-trial-read --trial <gtrial-id> [--file <path>]`: the exact source tree and experiment
+  annotations for one Kernel Trial. Use this to distinguish an implementation failure from a
+  failed optimization hypothesis instead of relying only on prose summaries;
 - `agents`: visible Agent revisions, version/parent links, origin, promotion disposition, and
   repository locations;
 - `agent-diff --base <agentrev> --candidate <agentrev>`: bounded repository differences between two
