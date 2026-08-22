@@ -80,7 +80,11 @@ only verifies its fixed path and Manifest-bound Digest before appending it to th
 The Coding Agent writes tagged `EvolutionOutputV3`. It may derive a new revision from Active,
 reuse one visible historical revision unchanged, or derive a new revision from one visible
 historical revision. New-revision proposals include an exact sorted changed-path declaration
-relative to the selected base. Runtime remains authoritative: it validates frozen visibility,
+relative to the selected base. Every mode may include bounded structured
+`unimplemented_capabilities`, recording a capability, its expected Kernel-optimization benefit, and
+the concrete reason it could not be implemented. Runtime preserves these untrusted advisory entries
+in Evolution Evidence so later Evolvers can inspect them; they confer no authority and do not change
+selection. Runtime remains authoritative: it validates frozen visibility,
 requires the Candidate-base record to match the proposal mode, independently hashes Base and
 Candidate, verifies the actual changed set and Bundle policy, seals
 per-Epoch proposal provenance, and runs the configured Active-versus-Challenger-pool evaluation.

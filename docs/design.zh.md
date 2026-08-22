@@ -73,8 +73,11 @@ Digest，再拼入最终 Prompt。
 
 Coding Agent 输出带判别字段的 `EvolutionOutputV3`：可以从 Active 派生新 Revision、原样复用
 一个可见历史 Revision，或从一个可见历史 Revision 派生新 Revision。创建新 Revision 的提案包含
-相对于所选 Base 的准确排序 Changed Paths。Runtime 仍是权威方：它校验冻结可见范围，独立 Hash
-Candidate Base 记录必须与提案形态一致；随后独立 Hash Base 与 Candidate，校验真实修改集合和
+相对于所选 Base 的准确排序 Changed Paths。每种模式都可以包含有界、结构化的
+`unimplemented_capabilities`，记录所需能力、预期 Kernel 优化收益以及本次无法实现的具体原因。
+Runtime 会把这些不可信建议保留在 Evolution Evidence 中，供后续 Evolver 查看；它们不会授予
+额外权限，也不参与胜负选择。Runtime 仍是权威方：它校验冻结可见范围，并要求 Candidate Base
+记录必须与提案形态一致；随后独立 Hash Base 与 Candidate，校验真实修改集合和
 Bundle Policy，封存逐 Epoch 提案来源，再运行配置的
 Active/Challenger Pool 评估。Revision 父子关系仍是树；复用和晋升是参赛事件，不是祖先边。
 

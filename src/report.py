@@ -39,6 +39,36 @@ def _changed_paths(value: object) -> list[str]:
     return normalized
 
 
+def _unimplemented_capabilities(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list) or len(value) > 64:
+        raise ValueError("unimplemented_capabilities must be an array with at most 64 entries")
+    validated: list[dict[str, str]] = []
+    fields = {"capability", "expected_benefit", "reason_unimplemented"}
+    for index, item in enumerate(value):
+        if not isinstance(item, dict) or set(item) != fields:
+            raise ValueError(f"unimplemented_capabilities[{index}] fields are invalid")
+        validated.append(
+            {
+                "capability": _text(
+                    item.get("capability"),
+                    f"unimplemented_capabilities[{index}].capability",
+                    max_length=2000,
+                ),
+                "expected_benefit": _text(
+                    item.get("expected_benefit"),
+                    f"unimplemented_capabilities[{index}].expected_benefit",
+                    max_length=2000,
+                ),
+                "reason_unimplemented": _text(
+                    item.get("reason_unimplemented"),
+                    f"unimplemented_capabilities[{index}].reason_unimplemented",
+                    max_length=2000,
+                ),
+            }
+        )
+    return validated
+
+
 def validate_evolution_output(
     path: Path,
     *,
@@ -63,10 +93,14 @@ def validate_evolution_output(
         raise ValueError("Evolution output schema_version must be 3")
     proposal_type = value.get("proposal_type")
     common = {"schema_version", "proposal_type", "hypothesis", "expected_effect"}
+    optional = {"unimplemented_capabilities"}
     _text(value.get("hypothesis"), "hypothesis", max_length=4000)
     _text(value.get("expected_effect"), "expected_effect", max_length=4000)
+    if "unimplemented_capabilities" in value:
+        _unimplemented_capabilities(value["unimplemented_capabilities"])
     if proposal_type == "reuse":
-        if set(value) != common | {"candidate_revision_id"}:
+        required = common | {"candidate_revision_id"}
+        if not required <= set(value) or set(value) - optional != required:
             raise ValueError("reuse output fields are invalid")
         candidate = _revision(
             value["candidate_revision_id"], "candidate_revision_id", visible_revision_ids
@@ -76,7 +110,8 @@ def validate_evolution_output(
         if candidate not in historical_revision_ids:
             raise ValueError("reuse must select completed Lineage history")
     elif proposal_type in {"evolved", "evolve_from_history"}:
-        if set(value) != common | {"base_revision_id", "changed_paths"}:
+        required = common | {"base_revision_id", "changed_paths"}
+        if not required <= set(value) or set(value) - optional != required:
             raise ValueError(f"{proposal_type} output fields are invalid")
         base = _revision(value["base_revision_id"], "base_revision_id", visible_revision_ids)
         if proposal_type == "evolved" and base != active_revision_id:

@@ -13,9 +13,20 @@ not historical bases and cannot be selected again in the same Epoch.
 
 The goal is to improve the Agent's ability to discover a faster correct Kernel for the given DSL.
 This is Agent engineering, not Kernel implementation work.
-Actively eliminate redundant Harness design, duplicated instructions, and workflow steps that do
-not contribute to the selected hypothesis, while preserving required Bundle protocols, Runtime tool
-contracts, evidence handling, and safety boundaries.
+
+You have full design authority over the writable Agent Candidate. You may add, replace, reorganize,
+or delete any Agent-owned content, including prompts, skills, workflow and orchestration code, tool
+implementations and bindings, memory and context policy, Backend configuration, DSL guidance,
+tests, and documentation. You may replace the existing Agent architecture wholesale when the
+Evidence supports doing so. Do not preserve a file, feature, abstraction, or repository layout merely
+because the Parent contains it. The only required result is a valid complete Optimizer Bundle that
+obeys the Runtime-owned protocols and trust boundaries below.
+
+Use that authority to make Kernel optimization more effective and efficient: increase the chance of
+finding faster correct Kernels within the fixed Epoch budget, reduce wasted Agent work and repeated
+failed directions, and improve the use of available Evidence, tools, model calls, and wall time.
+Actively eliminate redundant Harness design, duplicated instructions, and workflow steps that do not
+contribute to the selected hypothesis.
 
 # Binding DSL constraint
 
@@ -90,15 +101,16 @@ only after choosing `evolve_from_history`; it mutates only `candidate/` and its 
    was useful. Separate authoritative evaluation facts from untrusted Agent annotations. Look for
    repeated failed hypotheses, missing information, brittle workflow steps, incorrect tool
    instructions, weak memory retrieval, or an overly broad search policy.
-5. Select a proposal mode and state one concrete bottleneck and one minimal Agent-level hypothesis
-   internally. Reuse is appropriate only when the historical design itself should be rerun; it does
-   not create a copy or a new Agent version.
+5. Select a proposal mode and state one concrete bottleneck and one coherent Agent-level hypothesis
+   internally. The implementation may be narrow or may redesign the complete Agent when warranted
+   by the Evidence. Reuse is appropriate only when the historical design itself should be rerun; it
+   does not create a copy or a new Agent version.
 6. For `evolved`, leave the initial Candidate base as-is. For `evolve_from_history`, invoke
    `runtime_tools.command` followed by `candidate-reset --base <revision-id>` exactly once for the
    selected historical revision. Do not copy, delete, or reconstruct the base repository manually.
-   After the operation succeeds, change only files required to test the hypothesis. You may revise
-   Backend configuration, Prompt, workflow code, tool bindings, memory policy, or DSL guidance,
-   provided the Bundle remains valid.
+   After the operation succeeds, make every repository change needed to test the hypothesis. This
+   includes adding or deleting files and replacing complete subsystems, provided the resulting Bundle
+   remains valid.
 7. For a new revision, review the exact selected-base-versus-Candidate file set and content
    differences. Remove unrelated churn. `changed_paths` must be the exact sorted set of regular files
    added, modified, or removed relative to `base_revision_id`; a no-op is invalid.
@@ -107,6 +119,14 @@ only after choosing `evolve_from_history`; it mutates only `candidate/` and its 
 # Terminal output
 
 Write exactly one JSON object using one of these three shapes to the supplied output path.
+
+Every shape includes `unimplemented_capabilities`. Use it to record useful Agent capabilities that
+you believe would make Kernel optimization more effective or efficient but that you could not
+implement in this Candidate, either because the required mechanism is outside your authority or
+because you do not know a sound implementation. Each entry must describe the capability, its
+expected benefit, and the concrete reason it remains unimplemented. This is an advisory report
+section, not a request for extra authority and not a substitute for implementing changes that are
+feasible inside `candidate/`. Use an empty array when there are none.
 
 Current Active as base:
 
@@ -117,7 +137,14 @@ Current Active as base:
   "base_revision_id": "agentrev_00000000000000000000000000000000",
   "hypothesis": "A specific explanation of why the Agent change should help.",
   "expected_effect": "The observable optimization behavior expected in the next Epoch.",
-  "changed_paths": ["path/changed/in/the/candidate"]
+  "changed_paths": ["path/changed/in/the/candidate"],
+  "unimplemented_capabilities": [
+    {
+      "capability": "A capability still needed by the Agent.",
+      "expected_benefit": "How it would improve Kernel optimization.",
+      "reason_unimplemented": "Why it could not be implemented in this Candidate."
+    }
+  ]
 }
 ```
 
@@ -129,7 +156,8 @@ Existing historical revision unchanged:
   "proposal_type": "reuse",
   "candidate_revision_id": "agentrev_11111111111111111111111111111111",
   "hypothesis": "Why rerunning this historical Agent is preferable to creating a revision.",
-  "expected_effect": "The behavior expected when this existing Agent competes again."
+  "expected_effect": "The behavior expected when this existing Agent competes again.",
+  "unimplemented_capabilities": []
 }
 ```
 
@@ -142,7 +170,8 @@ Historical revision as the base of a new revision:
   "base_revision_id": "agentrev_11111111111111111111111111111111",
   "hypothesis": "Why this historical design is the right base for the change.",
   "expected_effect": "The observable optimization behavior expected in the next Epoch.",
-  "changed_paths": ["path/changed/in/the/candidate"]
+  "changed_paths": ["path/changed/in/the/candidate"],
+  "unimplemented_capabilities": []
 }
 ```
 

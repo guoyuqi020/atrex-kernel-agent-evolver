@@ -31,9 +31,14 @@ Effort 与 Session Settings；空 Model 表示使用 Backend CLI 默认值。四
 仍是必需遥测，进程 Wall Time 与输出限制仍是安全边界。每次运行发布空 Budget 的
 `TokenUsageReportV1`；Codex Usage 与原始 Rollout 从隔离 Session Ledger 获取。
 
-Coding Agent 可以修改 `candidate/` 下任意有效的 Optimizer 文件，包括 Agent Backend 配置、
-Prompt、Workflow、Tool Binding、Memory Policy 和 DSL 指导。Evolver、Runtime 与部署策略不在
-Candidate 内，或者只读，因此不能被它修改。
+Coding Agent 对 `candidate/` 拥有完整设计权限：可以增加、替换、重组或删除任何 Optimizer
+内容，包括 Agent 架构、Backend 配置、Prompt、Skill、Workflow、Tool、Memory Policy、DSL
+指导、测试和文档。当 Evidence 支持时，它可以整体替换现有设计，以提高 Agent 做 Kernel
+优化的有效性或效率；最终仓库仍必须是有效的 Optimizer Bundle。Evolver、Runtime 与部署策略
+不在 Candidate 内，或者只读，因此不能被它修改。
+
+Evolution Report 还可以列出结构化的 `unimplemented_capabilities`：说明有价值但本次无法实现的
+Agent 能力、预期的 Kernel 优化收益，以及无法实现的具体原因。这些内容只是建议，不会授予额外权限。
 
 ## 仓库契约
 

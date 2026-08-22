@@ -37,9 +37,16 @@ mandatory telemetry, while process wall time and output bounds remain safety lim
 publishes `TokenUsageReportV1` with a null budget; Codex usage and raw rollout capture are obtained
 from its isolated Session Ledger.
 
-The Coding Agent may change any valid Optimizer-owned file under `candidate/`, including its Agent
-backend configuration, Prompt, workflow, tool bindings, memory policy, and DSL guidance. It cannot
-change this Evolver, Runtime, or deployment policy because those files are absent or read-only.
+The Coding Agent has full design authority over `candidate/`: it may add, replace, reorganize, or
+delete any Optimizer-owned content, including Agent architecture, backend configuration, prompts,
+skills, workflows, tools, memory policy, DSL guidance, tests, and documentation. It may replace the
+existing design wholesale when that is the best evidence-backed way to improve Kernel-optimization
+effectiveness or efficiency. The resulting repository must still be a valid Optimizer Bundle. It
+cannot change this Evolver, Runtime, or deployment policy because those files are absent or read-only.
+
+The Evolution report may also list structured `unimplemented_capabilities`: useful Agent
+capabilities, their expected Kernel-optimization benefit, and why the Evolver could not implement
+them in the Candidate. These entries are advisory and grant no additional authority.
 
 ## Repository contract
 

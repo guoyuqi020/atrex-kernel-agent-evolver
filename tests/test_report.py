@@ -50,6 +50,13 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Tighten the search policy.",
             "expected_effect": "Fewer repeated unsuccessful changes.",
             "changed_paths": ["prompts/episode.md", "src/workflow.py"],
+            "unimplemented_capabilities": [
+                {
+                    "capability": "Automatic profiler-guided tool synthesis.",
+                    "expected_benefit": "Spend fewer attempts on irrelevant bottlenecks.",
+                    "reason_unimplemented": "No profiler capability is available to the Evolver.",
+                }
+            ],
         },
         {
             "schema_version": 3,
@@ -90,4 +97,27 @@ def test_output_rejects_revision_outside_frozen_visibility(tmp_path: Path) -> No
         )
     )
     with pytest.raises(ValueError, match="outside the frozen"):
+        _validate(path)
+
+
+def test_output_rejects_malformed_unimplemented_capability(tmp_path: Path) -> None:
+    path = tmp_path / "output.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "proposal_type": "reuse",
+                "candidate_revision_id": HISTORICAL,
+                "hypothesis": "Retry a previously strong design.",
+                "expected_effect": "Recover its prior search behavior.",
+                "unimplemented_capabilities": [
+                    {
+                        "capability": "Profiler-guided search.",
+                        "expected_benefit": "Select useful hypotheses faster.",
+                    }
+                ],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="fields are invalid"):
         _validate(path)
