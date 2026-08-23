@@ -77,3 +77,25 @@ def test_config_rejects_prompt_escape(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="safe repository-relative"):
         EvolverConfig.load(repository)
+
+
+def test_runtime_session_timeout_overrides_the_bundle_agent_timeout(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+
+    assert EvolverConfig.load(repository).agent_timeout_seconds == 60
+
+    bound = EvolverConfig.load(
+        repository,
+        environment={"ATREX_SESSION_TIMEOUT_SECONDS": "10800.0"},
+    )
+
+    assert bound.agent_timeout_seconds == 10_800
+
+
+@pytest.mark.parametrize("value", ("0", "-1", "abc", ""))
+def test_runtime_session_timeout_must_be_a_positive_number(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ValueError):
+        EvolverConfig.load(
+            _repository(tmp_path),
+            environment={"ATREX_SESSION_TIMEOUT_SECONDS": value},
+        )

@@ -137,15 +137,25 @@ class EvolverConfig:
             executable = _DEFAULT_EXECUTABLE[backend]
         else:
             model = None
+        agent_timeout_seconds = _positive_int(
+            value["agent_timeout_seconds"], "agent_timeout_seconds"
+        )
+        runtime_timeout = binding.get("ATREX_SESSION_TIMEOUT_SECONDS")
+        if runtime_timeout is not None:
+            try:
+                seconds = int(float(runtime_timeout))
+            except ValueError as error:
+                raise ValueError(f"invalid Runtime session timeout: {runtime_timeout!r}") from error
+            if seconds <= 0:
+                raise ValueError("Runtime session timeout must be positive")
+            agent_timeout_seconds = seconds
         return cls(
             agent_backend=backend,
             agent_executable=executable,
             reasoning_effort=effort,
             session_settings=settings,
             prompt_path=_repository_file(repository, value["prompt"], "prompt"),
-            agent_timeout_seconds=_positive_int(
-                value["agent_timeout_seconds"], "agent_timeout_seconds"
-            ),
+            agent_timeout_seconds=agent_timeout_seconds,
             max_stderr_chars=_positive_int(value["max_stderr_chars"], "max_stderr_chars"),
             max_output_manifest_bytes=_positive_int(
                 value["max_output_manifest_bytes"], "max_output_manifest_bytes"
