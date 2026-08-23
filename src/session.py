@@ -15,7 +15,7 @@ from typing import Any
 import backends
 from config import EvolverConfig
 from context import EvolutionContext
-from report import validate_evolution_output
+from report import EvolutionOutputContractError, validate_evolution_output
 from session_transcript import (
     FILTERED_PROVIDER_EVENTS,
     encode_records,
@@ -503,4 +503,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
 
 def safe_error(error: BaseException) -> dict[str, Any]:
     """Return bounded non-secret error metadata for the outer process diagnostic."""
-    return {"error_type": type(error).__name__}
+    detail: dict[str, Any] = {"error_type": type(error).__name__}
+    if isinstance(error, EvolutionOutputContractError):
+        detail["message"] = str(error)[:500]
+    return detail

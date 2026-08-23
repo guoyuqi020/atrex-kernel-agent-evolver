@@ -8,6 +8,14 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 
+class EvolutionOutputContractError(ValueError):
+    """The Agent's evolution output violates the published contract.
+
+    Every message is composed here from field names and indices alone, so the
+    outer process may surface it verbatim without leaking Agent content.
+    """
+
+
 def _text(value: object, label: str, *, max_length: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > max_length:
         raise ValueError(f"{label} must be non-blank and at most {max_length} characters")
@@ -69,7 +77,7 @@ def _unimplemented_capabilities(value: object) -> list[dict[str, str]]:
     return validated
 
 
-def validate_evolution_output(
+def _validated_output(
     path: Path,
     *,
     active_revision_id: str,
@@ -77,7 +85,7 @@ def validate_evolution_output(
     historical_revision_ids: frozenset[str],
     max_bytes: int,
 ) -> dict[str, Any]:
-    """Validate the Agent-authored tagged proposal before Runtime revalidates it."""
+    """Apply every EvolutionOutputV3 rule, raising a bare ValueError per violation."""
     try:
         metadata = path.lstat()
     except FileNotFoundError as error:
@@ -124,3 +132,30 @@ def validate_evolution_output(
     else:
         raise ValueError("proposal_type must be evolved, reuse, or evolve_from_history")
     return value
+
+
+def validate_evolution_output(
+    path: Path,
+    *,
+    active_revision_id: str,
+    visible_revision_ids: frozenset[str],
+    historical_revision_ids: frozenset[str],
+    max_bytes: int,
+) -> dict[str, Any]:
+    """Validate the Agent-authored tagged proposal before Runtime revalidates it.
+
+    Every violation carries the offending field so the outer process can tell the
+    Agent what to correct instead of reporting only an exception type.
+    """
+    try:
+        return _validated_output(
+            path,
+            active_revision_id=active_revision_id,
+            visible_revision_ids=visible_revision_ids,
+            historical_revision_ids=historical_revision_ids,
+            max_bytes=max_bytes,
+        )
+    except EvolutionOutputContractError:
+        raise
+    except ValueError as error:
+        raise EvolutionOutputContractError(str(error)) from error

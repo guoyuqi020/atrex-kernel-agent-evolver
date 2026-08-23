@@ -128,8 +128,9 @@ Write exactly one JSON object using one of these three shapes to the supplied ou
 Every shape includes `unimplemented_capabilities`. Use it to record useful Agent capabilities that
 you believe would make Kernel optimization more effective or efficient but that you could not
 implement in this Candidate, either because the required mechanism is outside your authority or
-because you do not know a sound implementation. Each entry must describe the capability, its
-expected benefit, and the concrete reason it remains unimplemented. This is an advisory report
+because you do not know a sound implementation. Each entry must be a JSON object carrying exactly
+the three string keys `capability`, `expected_benefit`, and `reason_unimplemented`; a bare prose
+string is rejected, and so is any object with a missing or extra key. This is an advisory report
 section, not a request for extra authority and not a substitute for implementing changes that are
 feasible inside `candidate/`. Use an empty array when there are none.
 

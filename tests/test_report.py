@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from report import validate_evolution_output
+from report import EvolutionOutputContractError, validate_evolution_output
+from session import safe_error
 
 ACTIVE = "agentrev_0123456789abcdef0123456789abcdef"
 HISTORICAL = "agentrev_11111111111111111111111111111111"
@@ -121,3 +122,34 @@ def test_output_rejects_malformed_unimplemented_capability(tmp_path: Path) -> No
     )
     with pytest.raises(ValueError, match="fields are invalid"):
         _validate(path)
+
+
+def test_contract_violations_name_the_offending_field(tmp_path: Path) -> None:
+    path = tmp_path / "output.json"
+    # The shape a real Evolver produced: prose strings where objects are required.
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "proposal_type": "evolved",
+                "base_revision_id": ACTIVE,
+                "hypothesis": "Bundle reusable skills into the sealed repository.",
+                "expected_effect": "Spend less budget rebuilding apparatus.",
+                "changed_paths": ["prompts/episode.md"],
+                "unimplemented_capabilities": [
+                    "Cross-attempt persistence: no handoff mechanism exists by design.",
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(EvolutionOutputContractError) as raised:
+        _validate(path)
+
+    assert "unimplemented_capabilities[0]" in str(raised.value)
+    assert safe_error(raised.value)["message"] == str(raised.value)
+
+
+def test_unknown_failures_still_report_only_their_type() -> None:
+    assert safe_error(RuntimeError("upstream detail")) == {"error_type": "RuntimeError"}
