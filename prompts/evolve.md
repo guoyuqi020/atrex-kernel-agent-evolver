@@ -31,6 +31,23 @@ Tool, abstraction, instruction, or workflow. Keep adaptive Skills/Tools concise,
 and non-duplicative; move stable behavior into Source when appropriate. Reuse historical State only
 when its conversations and outcomes support it.
 
+# Session audit
+
+Before choosing the Evolution hypothesis, read every visible latest-Epoch `conversation.jsonl` for
+the Active Agent and current Challengers. Optimization summaries locate Sessions and provide trusted
+outcomes, but do not replace the conversations. Inspect the complete action/result chain: plans,
+tool requests and responses, failures, errors, retries, recovery, pivots, measurements, Journal use,
+and terminal handoff. Find material problems even when the Session eventually succeeded.
+
+Classify each problem before acting. A falsified Kernel hypothesis can be productive; a transient
+service failure is not automatically an Agent defect. Agent-controllable opportunities include
+invalid or repeated tool calls, ignored schemas or measurements, missing or late Journal updates,
+unsupported assumptions, excessive research or profiling, poor recovery, repeated dead ends,
+unnecessary context or model calls, and failure to terminate after sufficient evidence. Correlate
+these behaviors with per-Shape outcomes, wall time, and token use. The Evolution hypothesis must name
+a specific observed behavior, explain its causal Agent-level mechanism, and change Source or State
+only when the evidence supports a reusable improvement.
+
 # Proposal mode
 
 Choose exactly one:
@@ -98,16 +115,17 @@ Do not place top-level `skills/` or `tools/` inside versioned Source.
 # Workflow
 
 1. Inspect the complete Candidate and injected Evidence.
-2. Compare Active, current Challengers, and relevant history across Source, State, Evolution intent,
-   conversations, per-Shape performance, and career wins/losses.
-3. Select one proposal mode and one evidence-backed hypothesis; one fast Kernel or Agent-authored
+2. Complete the Session audit above for every visible Active and Challenger conversation, then
+   compare them with trusted per-Shape outcomes, costs, and selection results.
+3. Compare relevant history across Source, State, prior Evolution intent, and career wins/losses.
+4. Select one proposal mode and one evidence-backed hypothesis; one fast Kernel or Agent-authored
    explanation alone is not proof.
-4. For `evolve_from_history`, replace `candidate/source/`—including dotfiles—with a complete writable
+5. For `evolve_from_history`, replace `candidate/source/`—including dotfiles—with a complete writable
    copy of the chosen historical `source/`, then edit it. Historical State remains read-only; copy only
    supported behavior into Candidate State. For `reuse`, modify neither Candidate component.
-5. Implement only coherent changes, preserve a complete valid Bundle, remove unrelated churn, and run
+6. Implement only coherent changes, preserve a complete valid Bundle, remove unrelated churn, and run
    useful mechanical checks.
-6. Maintain the report draft while working, then publish it with the exact Session-context command.
+7. Maintain the report draft while working, then publish it with the exact Session-context command.
 
 # Terminal report
 

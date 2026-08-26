@@ -413,6 +413,34 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "candidate" in prompt
 
 
+def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    repository_prompt = Path(__file__).resolve().parents[1] / "prompts/evolve.md"
+    config = replace(
+        _config(tmp_path, _fake_claude(tmp_path)),
+        prompt_path=repository_prompt,
+    )
+    prompt = render_prompt(context, config)
+    normalized = " ".join(prompt.split())
+
+    assert "# Session audit" in prompt
+    assert "read every visible latest-Epoch `conversation.jsonl`" in normalized
+    assert "do not replace the conversations" in normalized
+    assert "Find material problems even when the Session eventually succeeded" in normalized
+    assert "A falsified Kernel hypothesis can be productive" in normalized
+    assert "transient service failure is not automatically an Agent defect" in normalized
+    for opportunity in (
+        "invalid or repeated tool calls",
+        "missing or late Journal updates",
+        "excessive research or profiling",
+        "poor recovery",
+        "failure to terminate after sufficient evidence",
+    ):
+        assert opportunity in normalized
+    assert "specific observed behavior" in normalized
+    assert "causal Agent-level mechanism" in normalized
+
+
 def test_session_records_large_usage_without_a_token_limit(tmp_path: Path) -> None:
     context = _context(tmp_path)
     config = _config(tmp_path, _budget_exhausting_claude(tmp_path))
