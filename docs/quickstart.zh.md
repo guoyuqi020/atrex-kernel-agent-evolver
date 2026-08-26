@@ -67,7 +67,7 @@ Evolver 用所选历史 Agent 的 Source 替换 Candidate Source，并可从可�
 持续维护 `scratch/evolution-report-draft.json`，然后调用：
 
 ```bash
-python input/evolver/src/runtime_tools.py evolution-report \
+python3 input/evolver/src/runtime_tools.py evolution-report \
   --request scratch/evolution-report-draft.json
 ```
 

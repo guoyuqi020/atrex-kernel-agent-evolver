@@ -116,7 +116,7 @@ per-Epoch proposal provenance, and runs the configured Active-versus-Challenger-
 Revision parentage remains a tree; reuse and promotion are participation events, not ancestry edges.
 
 The Agent maintains `scratch/evolution-report-draft.json` and invokes the fixed read-only Bundle
-tool `python input/evolver/src/runtime_tools.py evolution-report --request
+tool `python3 input/evolver/src/runtime_tools.py evolution-report --request
 scratch/evolution-report-draft.json`. A failed invocation publishes nothing and returns `issues`, the
 exact `request_schema`, and bounded `recovery` instructions. The Agent may correct and retry until
 the first success atomically publishes `scratch/evolution-report.json`; calls after success are

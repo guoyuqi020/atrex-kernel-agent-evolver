@@ -73,7 +73,7 @@ logical Agent Bundle.
 Maintain `scratch/evolution-report-draft.json`, then submit it with:
 
 ```bash
-python input/evolver/src/runtime_tools.py evolution-report \
+python3 input/evolver/src/runtime_tools.py evolution-report \
   --request scratch/evolution-report-draft.json
 ```
 

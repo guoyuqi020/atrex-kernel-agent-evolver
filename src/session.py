@@ -96,7 +96,7 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
         "evolution_report": {
             "draft": "scratch/evolution-report-draft.json",
             "tool": (
-                "python input/evolver/src/runtime_tools.py evolution-report "
+                "python3 input/evolver/src/runtime_tools.py evolution-report "
                 "--request scratch/evolution-report-draft.json"
             ),
             "published": "scratch/evolution-report.json",

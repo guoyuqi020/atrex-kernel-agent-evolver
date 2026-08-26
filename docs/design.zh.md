@@ -101,7 +101,7 @@ Bundle Policy，封存逐 Epoch 提案来源，再运行配置的
 Active/Challenger Pool 评估。Revision 父子关系仍是树；复用和晋升是参赛事件，不是祖先边。
 
 Agent 持续维护 `scratch/evolution-report-draft.json`，并调用只读 Bundle 中固定的
-`python input/evolver/src/runtime_tools.py evolution-report --request
+`python3 input/evolver/src/runtime_tools.py evolution-report --request
 scratch/evolution-report-draft.json`。调用失败不会发布内容，而是返回 `issues`、准确的
 `request_schema` 和有界 `recovery` 指令；Agent 可修改并重试。第一次成功调用会原子发布
 `scratch/evolution-report.json`，之后再次调用会被拒绝。工具检查真实 Source Diff 与私有初始 State

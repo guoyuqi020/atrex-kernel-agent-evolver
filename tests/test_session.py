@@ -407,7 +407,7 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "Do not place top-level `skills/` or `tools/`" in prompt
     assert "candidate/runtime-state/" in prompt
     assert "reusable `skills/` and `tools/` seed" in prompt
-    assert "input/evolver/src/runtime_tools.py evolution-report" in prompt
+    assert "python3 input/evolver/src/runtime_tools.py evolution-report" in prompt
     assert "scratch/evolution-report-draft.json" in prompt
     assert "never write `scratch/evolution-report.json` directly" in prompt
     assert "candidate" in prompt
