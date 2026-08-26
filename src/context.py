@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -13,12 +12,14 @@ from pathlib import Path
 from typing import Any
 
 MAX_MANIFEST_BYTES = 256 * 1024
-MAX_RUNTIME_TOOL_CATALOG_BYTES = 16 * 1024 * 1024
+MAX_OPTIMIZATION_SUMMARY_BYTES = 16 * 1024 * 1024
 MAX_EVIDENCE_PROMPT_BYTES = 32 * 1024
 MAX_LAUNCH_INPUT_BYTES = 4096
 LAUNCH_SENTINEL = "Run the versioned Evolver Bundle once."
 _REVISION_ID = re.compile(r"^agentrev_[0-9a-f]{32}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_TRAJECTORY_DIRECTORY = re.compile(r"^trajectory-([0-9]{8})$")
+_EVOLUTION_REPORT_FILE = re.compile(r"^evo-([1-9][0-9]*)\.json$")
 
 
 @dataclass(frozen=True)
@@ -26,9 +27,17 @@ class VisibleAgent:
     """One Runtime-validated read-only Optimizer design."""
 
     revision_id: str
+    version: str | None
     optimizer_digest: str
     path: str
     root: Path
+    optimization_summary_path: str
+    optimization_summary_root: Path
+    sessions_path: str | None
+    sessions_root: Path | None
+    runtime_state_path: str
+    runtime_state_root: Path
+    runtime_state_trajectory_ordinals: tuple[int, ...]
     parent: bool
     relationship: str
     challenger_ordinal: int | None
@@ -62,22 +71,6 @@ def _bounded_json_file(path: Path, label: str, max_bytes: int) -> dict[str, Any]
     return _object(json.loads(path.read_text(encoding="utf-8")), label)
 
 
-def _bounded_text_file(path: Path, label: str, max_bytes: int) -> tuple[str, bytes]:
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError as error:
-        raise ValueError(f"{label} is unavailable") from error
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-        raise ValueError(f"{label} must be a regular file")
-    if metadata.st_size <= 0 or metadata.st_size > max_bytes:
-        raise ValueError(f"{label} is empty or exceeds its byte limit")
-    payload = path.read_bytes()
-    try:
-        return payload.decode("utf-8"), payload
-    except UnicodeDecodeError as error:
-        raise ValueError(f"{label} must be UTF-8") from error
-
-
 def _real_directory(path: Path, label: str) -> Path:
     try:
         metadata = path.lstat()
@@ -86,6 +79,45 @@ def _real_directory(path: Path, label: str) -> Path:
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
         raise ValueError(f"{label} must be a real directory")
     return path.resolve()
+
+
+def _validate_runtime_state(root: Path, revision_id: str) -> tuple[int, ...]:
+    """Validate one Runtime-authored, read-only Agent-state Evidence projection."""
+    if {child.name for child in root.iterdir()} != {"trajectories"}:
+        raise ValueError(f"Agent {revision_id} runtime-state layout is invalid")
+    trajectories = _real_directory(
+        root / "trajectories",
+        f"Agent {revision_id} runtime-state trajectories",
+    )
+    ordinals: list[int] = []
+    for trajectory in sorted(trajectories.iterdir()):
+        match = _TRAJECTORY_DIRECTORY.fullmatch(trajectory.name)
+        if match is None:
+            raise ValueError(f"Agent {revision_id} runtime-state trajectory name is invalid")
+        ordinal = int(match.group(1))
+        if ordinal <= 0:
+            raise ValueError(f"Agent {revision_id} runtime-state trajectory ordinal is invalid")
+        root = _real_directory(
+            trajectory,
+            f"Agent {revision_id} runtime-state trajectory {ordinal}",
+        )
+        if {child.name for child in root.iterdir()} != {"skills", "tools"}:
+            raise ValueError(
+                f"Agent {revision_id} runtime-state trajectory {ordinal} must contain skills/tools"
+            )
+        for name in ("skills", "tools"):
+            tree = _real_directory(
+                root / name,
+                f"Agent {revision_id} runtime-state trajectory {ordinal} {name}",
+            )
+            for entry in tree.rglob("*"):
+                mode = entry.lstat().st_mode
+                if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                    raise ValueError(
+                        f"Agent {revision_id} runtime-state {name} contains an invalid entry"
+                    )
+        ordinals.append(ordinal)
+    return tuple(ordinals)
 
 
 def _strict_environment(environment: Mapping[str, str], name: str) -> str:
@@ -111,11 +143,10 @@ class EvolutionContext:
     """Validated paths and identity visible to the Evolver implementation."""
 
     workspace: Path
-    manifest_path: Path
-    parent_root: Path
     visible_agents: tuple[VisibleAgent, ...]
     evidence_root: Path
-    runtime_tools_root: Path
+    evolution_reports_root: Path
+    evolution_number: int
     candidate_root: Path
     scratch_root: Path
     output_path: Path
@@ -132,16 +163,14 @@ class EvolutionContext:
     @classmethod
     def load(cls, environment: Mapping[str, str] | None = None) -> EvolutionContext:
         env = os.environ if environment is None else environment
-        manifest_input = Path(_strict_environment(env, "ATREX_EVOLUTION_INPUT"))
-        if manifest_input.is_symlink():
-            raise ValueError("ATREX_EVOLUTION_INPUT cannot be a symbolic link")
-        manifest_path = manifest_input.resolve()
-        workspace = _real_directory(manifest_path.parent, "Evolution workspace")
-        manifest = _bounded_json_file(
-            manifest_path,
-            "Evolution input manifest",
-            MAX_MANIFEST_BYTES,
-        )
+        raw_manifest = _strict_environment(env, "ATREX_EVOLUTION_INPUT_JSON")
+        if len(raw_manifest.encode("utf-8")) > MAX_MANIFEST_BYTES:
+            raise ValueError("Evolution input manifest exceeds its byte limit")
+        manifest = _object(json.loads(raw_manifest), "Evolution input manifest")
+        workspace_input = Path(_strict_environment(env, "ATREX_EVOLUTION_WORKSPACE"))
+        if workspace_input.is_symlink():
+            raise ValueError("ATREX_EVOLUTION_WORKSPACE cannot be a symbolic link")
+        workspace = _real_directory(workspace_input.resolve(), "Evolution workspace")
         expected_fields = {
             "schema_version",
             "parent_revision_id",
@@ -157,7 +186,7 @@ class EvolutionContext:
                 "Evolution input fields disagree with schema: "
                 f"{sorted(set(manifest) ^ expected_fields)}"
             )
-        if manifest["schema_version"] != 4:
+        if manifest["schema_version"] != 10:
             raise ValueError("unsupported Evolution input schema_version")
         parent_revision_id = _text(manifest["parent_revision_id"], "parent_revision_id")
         if _REVISION_ID.fullmatch(parent_revision_id) is None:
@@ -175,25 +204,43 @@ class EvolutionContext:
             raise ValueError("unsupported Evolution DSL")
         paths = _object(manifest["paths"], "Evolution paths")
         expected_paths = {
-            "parent": "input/parent",
             "agents": "input/agents",
+            "historical": "input/historical",
             "evidence": "input/evidence",
-            "runtime_tools": "runtime-tools",
             "candidate": "candidate",
             "scratch": "scratch",
-            "output": "scratch/evolution-output.json",
+            "output": "scratch/evolution-report.json",
         }
         if paths != expected_paths:
-            raise ValueError("Evolution paths disagree with protocol v4")
+            raise ValueError("Evolution paths disagree with protocol v10")
 
-        parent_root = _real_directory(
-            _expected_path(workspace, expected_paths["parent"], "parent path"),
-            "Parent repository",
-        )
         agents_root = _real_directory(
             _expected_path(workspace, expected_paths["agents"], "agents path"),
             "Visible Agent repositories",
         )
+        historical_root = _real_directory(
+            _expected_path(workspace, expected_paths["historical"], "historical path"),
+            "Historical Agent repositories",
+        )
+        evidence_root = _real_directory(
+            _expected_path(workspace, expected_paths["evidence"], "evidence path"),
+            "Evidence view",
+        )
+        evolution_reports_root = _real_directory(
+            _expected_path(workspace, "input/evolution-reports", "Evolution reports path"),
+            "Evolution reports",
+        )
+        evolution_numbers: set[int] = set()
+        for report in evolution_reports_root.iterdir():
+            match = _EVOLUTION_REPORT_FILE.fullmatch(report.name)
+            if match is None or report.is_symlink() or not report.is_file():
+                raise ValueError("Evolution reports layout is invalid")
+            evolution_number = int(match.group(1))
+            value = _bounded_json_file(report, report.name, MAX_OPTIMIZATION_SUMMARY_BYTES)
+            if value.get("evolution_number") != evolution_number:
+                raise ValueError("Evolution report number disagrees with its filename")
+            evolution_numbers.add(evolution_number)
+        current_evolution_number = max(evolution_numbers, default=0) + 1
         raw_visible_agents = manifest["visible_agents"]
         if (
             not isinstance(raw_visible_agents, list)
@@ -207,18 +254,32 @@ class EvolutionContext:
             visible = _object(raw_visible, f"visible_agents[{index}]")
             if set(visible) != {
                 "revision_id",
+                "version",
                 "optimizer_digest",
                 "path",
+                "optimization_summary_path",
+                "sessions_path",
+                "runtime_state_path",
                 "parent",
                 "relationship",
                 "challenger_ordinal",
                 "parent_revision_id",
                 "created_by",
             }:
-                raise ValueError("visible Agent fields disagree with protocol v4")
+                raise ValueError("visible Agent fields disagree with protocol v10")
             revision_id = _text(visible["revision_id"], "visible Agent revision_id")
+            version = visible["version"]
             digest = _text(visible["optimizer_digest"], "visible Agent optimizer_digest")
             relative = _text(visible["path"], "visible Agent path")
+            optimization_summary_relative = _text(
+                visible["optimization_summary_path"],
+                "visible Agent optimization summary path",
+            )
+            sessions_relative = visible["sessions_path"]
+            runtime_state_relative = _text(
+                visible["runtime_state_path"],
+                "visible Agent runtime-state path",
+            )
             parent = visible["parent"]
             relationship = _text(
                 visible["relationship"],
@@ -234,8 +295,14 @@ class EvolutionContext:
             )
             if (
                 _REVISION_ID.fullmatch(revision_id) is None
+                or (
+                    version is not None
+                    and (
+                        not isinstance(version, str)
+                        or re.fullmatch(r"agent-v[0-9]+", version) is None
+                    )
+                )
                 or _DIGEST.fullmatch(digest) is None
-                or relative != f"input/agents/{revision_id}"
                 or not isinstance(parent, bool)
                 or relationship not in {"active", "current_epoch_challenger", "lineage_history"}
                 or parent != (relationship == "active")
@@ -258,16 +325,80 @@ class EvolutionContext:
                 or revision_id in seen_revisions
             ):
                 raise ValueError("visible Agent entry is invalid")
+            if relationship == "active":
+                expected_relative = "input/agents/active/source"
+                expected_summary = "input/evidence/active/optimization-summary.json"
+                expected_sessions = "input/evidence/active/sessions"
+                expected_runtime_state = "input/agents/active/runtime-state"
+            elif relationship == "current_epoch_challenger":
+                assert isinstance(challenger_ordinal, int)
+                role = f"challenger-{challenger_ordinal:04d}"
+                expected_relative = f"input/agents/{role}/source"
+                expected_summary = f"input/evidence/{role}/optimization-summary.json"
+                expected_sessions = f"input/evidence/{role}/sessions"
+                expected_runtime_state = f"input/agents/{role}/runtime-state"
+            else:
+                if not isinstance(version, str):
+                    raise ValueError("historical visible Agent requires a version")
+                expected_relative = f"input/historical/{version}/source"
+                expected_summary = f"input/historical/{version}/optimization-summary.json"
+                expected_sessions = None
+                expected_runtime_state = f"input/historical/{version}/runtime-state"
+            if (
+                relative != expected_relative
+                or optimization_summary_relative != expected_summary
+                or sessions_relative != expected_sessions
+                or runtime_state_relative != expected_runtime_state
+            ):
+                raise ValueError("visible Agent paths disagree with its role")
             root = _real_directory(
                 _expected_path(workspace, relative, "visible Agent path"),
                 f"Visible Agent {revision_id}",
             )
+            optimization_summary_root = _expected_path(
+                workspace,
+                optimization_summary_relative,
+                "visible Agent optimization summary path",
+            )
+            _bounded_json_file(
+                optimization_summary_root,
+                f"Visible Agent {revision_id} optimization summary",
+                MAX_OPTIMIZATION_SUMMARY_BYTES,
+            )
+            sessions_root = (
+                None
+                if expected_sessions is None
+                else _real_directory(
+                    _expected_path(workspace, expected_sessions, "visible Agent Sessions"),
+                    f"Visible Agent {revision_id} Sessions",
+                )
+            )
+            runtime_state_root = _real_directory(
+                _expected_path(
+                    workspace,
+                    runtime_state_relative,
+                    "visible Agent runtime-state path",
+                ),
+                f"Visible Agent {revision_id} runtime state",
+            )
+            runtime_state_trajectory_ordinals = _validate_runtime_state(
+                runtime_state_root,
+                revision_id,
+            )
             visible_agents.append(
                 VisibleAgent(
                     revision_id,
+                    version,
                     digest,
                     relative,
                     root,
+                    optimization_summary_relative,
+                    optimization_summary_root,
+                    expected_sessions,
+                    sessions_root,
+                    runtime_state_relative,
+                    runtime_state_root,
+                    runtime_state_trajectory_ordinals,
                     parent,
                     relationship,
                     challenger_ordinal,
@@ -276,8 +407,26 @@ class EvolutionContext:
                 )
             )
             seen_revisions.add(revision_id)
-        if {child.name for child in agents_root.iterdir()} != seen_revisions:
-            raise ValueError("visible Agent directories disagree with the manifest")
+        participant_names = {
+            "active",
+            *(
+                f"challenger-{item.challenger_ordinal:04d}"
+                for item in visible_agents
+                if item.relationship == "current_epoch_challenger"
+                and item.challenger_ordinal is not None
+            ),
+        }
+        historical_names = {
+            item.version
+            for item in visible_agents
+            if item.relationship == "lineage_history" and item.version is not None
+        }
+        if {child.name for child in agents_root.iterdir()} != participant_names:
+            raise ValueError("participant Agent directories disagree with the manifest")
+        if {child.name for child in historical_root.iterdir()} != historical_names:
+            raise ValueError("historical Agent directories disagree with the manifest")
+        if {child.name for child in evidence_root.iterdir()} != participant_names:
+            raise ValueError("participant Evidence directories disagree with the manifest")
         parents = [item for item in visible_agents if item.parent]
         if (
             len(parents) != 1
@@ -285,94 +434,45 @@ class EvolutionContext:
             or parents[0].optimizer_digest != optimizer_digest
         ):
             raise ValueError("visible Agent pool does not identify the exact Parent")
-        evidence_root = _real_directory(
-            _expected_path(workspace, expected_paths["evidence"], "evidence path"),
-            "Evidence view",
-        )
-        runtime_tools_root = _real_directory(
-            _expected_path(
-                workspace,
-                expected_paths["runtime_tools"],
-                "Runtime Tools path",
-            ),
-            "Runtime Tools",
-        )
-        runtime_catalog = _bounded_json_file(
-            runtime_tools_root / "catalog.json",
-            "Runtime Tools catalog",
-            MAX_RUNTIME_TOOL_CATALOG_BYTES,
-        )
-        if (
-            runtime_catalog.get("schema_version") != 1
-            or runtime_catalog.get("evidence_checkpoint") != evidence_checkpoint
-            or not isinstance(runtime_catalog.get("agents"), list)
-            or not isinstance(runtime_catalog.get("kernels"), list)
-        ):
-            raise ValueError("Runtime Tools catalog disagrees with the Evolution manifest")
-        _bounded_text_file(
-            runtime_tools_root / "evolver_tools.py",
-            "Runtime Tools client",
-            MAX_MANIFEST_BYTES,
-        )
-        _real_directory(runtime_tools_root / "kernels", "Runtime Tools Kernel catalog")
         candidate_root = _real_directory(
             _expected_path(workspace, expected_paths["candidate"], "candidate path"),
             "Candidate repository",
         )
+        candidate_children = {child.name for child in candidate_root.iterdir()}
+        if candidate_children != {"source", "runtime-state"}:
+            raise ValueError("Candidate must contain exactly source/ and runtime-state/")
+        candidate_source = _real_directory(
+            candidate_root / "source",
+            "Candidate source",
+        )
+        candidate_runtime_state = _real_directory(
+            candidate_root / "runtime-state",
+            "Candidate runtime-state",
+        )
+        if {child.name for child in candidate_runtime_state.iterdir()} != {"skills", "tools"}:
+            raise ValueError("Candidate runtime-state must contain exactly skills/ and tools/")
+        for name in ("skills", "tools"):
+            tree = _real_directory(
+                candidate_runtime_state / name,
+                f"Candidate runtime-state {name}",
+            )
+            for entry in tree.rglob("*"):
+                mode = entry.lstat().st_mode
+                if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                    raise ValueError(f"Candidate runtime-state {name} contains an invalid entry")
+        tools_readme = candidate_runtime_state / "tools/README.md"
+        if tools_readme.is_symlink() or not tools_readme.is_file():
+            raise ValueError("Candidate runtime-state tools/README.md must be a regular file")
         scratch_root = _real_directory(
             _expected_path(workspace, expected_paths["scratch"], "scratch path"),
             "Evolution scratch",
         )
-        if parent_root == candidate_root:
-            raise ValueError("Parent and Candidate repositories must be distinct")
-        evidence_manifest = _bounded_json_file(
-            evidence_root / "manifest.json",
-            "Evidence view manifest",
-            MAX_MANIFEST_BYTES,
-        )
-        expected_evidence_fields = {
-            "schema_version",
-            "role",
-            "lineage_checkpoint",
-            "prompt_fragment_sha256",
-            "through_completed_epoch",
-            "current_epoch",
-            "visibility",
-        }
-        visibility = _object(evidence_manifest.get("visibility"), "Evidence visibility")
-        if (
-            set(evidence_manifest) != expected_evidence_fields
-            or evidence_manifest.get("schema_version") != 1
-            or evidence_manifest.get("role") != "evolver"
-            or evidence_manifest.get("lineage_checkpoint") != evidence_checkpoint
-            or not isinstance(evidence_manifest.get("through_completed_epoch"), int)
-            or isinstance(evidence_manifest.get("through_completed_epoch"), bool)
-            or int(evidence_manifest["through_completed_epoch"]) < 0
-            or evidence_manifest.get("current_epoch") is not None
-            or visibility
-            != {
-                "completed_epochs": "all_completed_branches",
-                "current_attempts_before": None,
-            }
-        ):
-            raise ValueError("Evidence view disagrees with the Evolution manifest")
-        prompt_input = Path(_strict_environment(env, "ATREX_EVIDENCE_PROMPT_PATH"))
-        if prompt_input.is_symlink():
-            raise ValueError("ATREX_EVIDENCE_PROMPT_PATH cannot be a symbolic link")
-        prompt_path = prompt_input.resolve()
-        if prompt_path != evidence_root / "instructions.md":
-            raise ValueError("Evidence Prompt Fragment path disagrees with the Evidence view")
-        evidence_prompt, prompt_bytes = _bounded_text_file(
-            prompt_path,
-            "Evidence Prompt Fragment",
-            MAX_EVIDENCE_PROMPT_BYTES,
-        )
-        if hashlib.sha256(prompt_bytes).hexdigest() != evidence_manifest.get(
-            "prompt_fragment_sha256"
-        ):
-            raise ValueError("Evidence Prompt Fragment digest disagrees with the manifest")
-        for required in ("bootstrap", "epochs"):
-            _real_directory(evidence_root / required, f"Evidence {required}")
+        active_root = next(item.root for item in visible_agents if item.parent)
+        if active_root == candidate_source:
+            raise ValueError("Active and Candidate repositories must be distinct")
+        evidence_prompt = _strict_environment(env, "ATREX_EVIDENCE_PROMPT")
+        if len(evidence_prompt.encode("utf-8")) > MAX_EVIDENCE_PROMPT_BYTES:
+            raise ValueError("Evidence Prompt Fragment exceeds its byte limit")
         output_path = _expected_path(workspace, expected_paths["output"], "output path")
         supplied_candidate_input = Path(_strict_environment(env, "ATREX_EVOLUTION_CANDIDATE"))
         supplied_output_input = Path(_strict_environment(env, "ATREX_EVOLUTION_OUTPUT"))
@@ -398,11 +498,10 @@ class EvolutionContext:
             raise ValueError("Session trace path cannot be a symbolic link")
         return cls(
             workspace=workspace,
-            manifest_path=manifest_path,
-            parent_root=parent_root,
             visible_agents=tuple(visible_agents),
             evidence_root=evidence_root,
-            runtime_tools_root=runtime_tools_root,
+            evolution_reports_root=evolution_reports_root,
+            evolution_number=current_evolution_number,
             candidate_root=candidate_root,
             scratch_root=scratch_root,
             output_path=output_path,

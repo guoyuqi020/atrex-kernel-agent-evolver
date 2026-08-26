@@ -12,31 +12,30 @@ Runtime 物化以下 Workspace：
 
 ```text
 run-<uuid>/
-├── evolution-input.json       # 只读 EvolutionInputManifestV4
 ├── input/
-│   ├── parent/                # 只读完整 Optimizer 仓库
-│   ├── agents/                # 只读可见 Agent Revision 仓库
-│   │   └── agentrev_<id>/
-│   └── evidence/              # 只读 EvidenceViewManifestV1 Tree
-│       ├── manifest.json      # role=evolver；所有已完成分支
-│       ├── bootstrap/
-│       └── epochs/
-│           └── <epoch>/
-│               ├── summary.json
-│               ├── branches/ # Active 与所有 Challenger Attempt 历史
-│               ├── kernels/  # 精确 Kernel Artifact 与 index.json
-│               └── evolution/# 所有 Challenger 的 Evolver Trace
-├── runtime-tools/              # 冻结的 Runtime 检索与 Candidate Reset 工具
-│   ├── evolver_tools.py
-│   ├── catalog.json        # 精确 vN/agent-vN Lineage Catalog
-│   └── kernels/            # 全部历史精确 Kernel Artifact
-├── candidate/                 # 所选 Base 的完整可写副本
-└── scratch/                   # 可写 Report、Base 记录、Trace 与隔离 Agent 状态
+│   ├── agents/                # 仅当前参赛池
+│   │   ├── active/{source,runtime-state}/
+│   │   └── challenger-<ordinal>/{source,runtime-state}/
+│   ├── evidence/              # 只读、已授权的运行 Evidence
+│   │   ├── active/{optimization-summary.json,sessions/}
+│   │   └── challenger-<ordinal>/{optimization-summary.json,sessions/}
+│   └── historical/            # 已完成且非当前的 Agent 版本
+│       └── agent-v<N>/
+│           ├── source/        # 精确版本化 Agent 仓库
+│           ├── optimization-summary.json
+│           └── runtime-state/ # 各 Trajectory 的 skills/tools
+├── candidate/                 # 可写 Agent Candidate
+│   ├── source/                # 完整版本化 Bundle
+│   └── runtime-state/         # 唯一一份公共 {skills,tools} 种子
+└── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
 ```
 
 Runtime 路径校验与进程 Capability 是当前可信边界，Prompt 指令只是纵深防御。Evolver 不获得
 Runtime Gateway/Wiki Capability，也不能评测 GPU Kernel。OS Sandbox 明确推迟；在实现它之前，
 不能把恶意 Agent 代码视为已被隔离。
+
+Evolution Manifest 与 Evidence Prompt 通过内存传给外层 Bundle 进程，不会物化到 Agent 可见
+Workspace。Evolver 不获得 Runtime HTTP Capability；全部授权输入都是 `input/` 下已经存在的不可变文件。
 
 ## 2. 版本化行为
 
@@ -49,37 +48,64 @@ Archive 或超限都会被拒绝。部署后续可以固定另一个 Commit，�
 
 ## 3. 输入与输出
 
-入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 4。Manifest 必须标出恰好一个
+入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 9。Manifest 必须标出恰好一个
 Parent，并提供非空、无重复的 `visible_agents` Catalog。Runtime 会加入已保留的 Lineage Agent
-历史，以及当前 Epoch 中此前已创建的 Challenger；每个条目都解析到 `input/agents/` 下一个只读
-仓库，并明确提供 Parent Link、创建者、关系类型以及适用时的当前 Epoch Challenger Ordinal。
-入口同时要求严格 Evidence View 使用匹配的 Lineage Checkpoint、
-`role="evolver"`、所有已完成 Epoch 的全部分支且无当前 Epoch。已完成 Summary 保留
-Active、Challenger、胜出 Agent、起始 Kernel 与最佳 Kernel 身份；Branch Tree 保留每个
-Attempt 与权威 Outcome；`kernels/` 对每个被引用的精确 Kernel Artifact 去重后物化一次。
+历史，以及当前 Epoch 中此前已创建的 Challenger。当前参赛者位于 `input/agents/`；已完成且非当前的
+版本位于 `input/historical/agent-vN/`。统一 Evidence View 为每个当前参赛者提供 Runtime 派生的
+优化效果汇总，并按 Trajectory 提供其最近完成 Epoch 中每个 Attempt 的一份权威
+`conversation.jsonl`；Bootstrap 与更早 Epoch 的 Conversation 仍属于 Runtime 私有历史。可用的历史 Agent
+创建 `EvolutionOutput` 投影成有序的 `input/evolution-reports/evo-N.json` Wrapper，其中关联 Source Base、
+产出 Agent 以及各自在本 Workspace 的 Source/Runtime State 路径；完整 Evolution Trace 保持私有。各
+Trajectory 持久积累的自适应 `skills/` 与 `tools/` 位于对应当前源码旁边的
+`runtime-state/` 下。历史目录将精确源码、累计优化效果与运行时状态放在一起。这些内容是非版本化
+Lineage 状态，也是唯一的自适应 Skill/Tool 存储。根级 `skills/` 和 `tools/` 在版本化 Source 中
+无效。Evolver 可以直接整理 `candidate/runtime-state/`，也可以修改控制未来如何使用状态的 Source
+机制。Runtime 始终分别封存 Candidate Source 与 State，并把两者组合为同一个不可变 Agent Bundle；
+后续每条新 Trajectory 都从这个 Bundle 的 State 初始化。State 是否相对输入发生修改不影响封存。
+Catalog
+同时明确提供 Parent Link、创建者、关系类型以及适用时的当前 Epoch
+Challenger Ordinal。
+每份优化效果汇总将该 Agent Revision 最近一次完成的 Epoch 与累计战绩分开。最近 Epoch 部分统计
+正确 Kernel、错误 Kernel 和未产出 Candidate Kernel 的 Attempt 数，并内嵌最佳正确 Kernel 的
+权威 Gateway 逐 Shape 投影；累计部分统计已完成 Epoch 的参赛、获胜和失败次数。
+Runtime 从匹配的不可变 Lineage Checkpoint 派生这份紧凑视图，不暴露 Agent-facing `epochs/` 目录，也不在
+Evolution Workspace 中重复保存详细历史。
 入口把环境路径绑定到
 Manifest，并拒绝 Link 与越界路径。Usage Report 目标是必需输入，但不接受 Token Budget。
 
-Runtime 还会在 `runtime-tools/` 下注入限定快照的检索与 Candidate 控制 Client 和 Catalog。Catalog 提供
-精确的 Lineage 内 Kernel/Agent 版本标签、Provenance、评测事实和每个历史 Kernel Artifact
-路径。Client 提供有界 JSON `history`、`branches`、`attempts`、`kernels`、`kernel-read`、
-`agents`、`agent-diff` 和 `trace-paths` 命令。唯一写操作
-`candidate-reset --base <agentrev>` 只接受 Manifest 中标为 `lineage_history` 的 Revision，先构造
-完整可写副本，再原子替换 `candidate/`，并在 `scratch/candidate-base.json` 记录 Base。它只使用
-本次冻结 Workspace，不授予 Registry、Gateway、Wiki、评测或晋升权限。
+`Parent` 只是一种角色，不是另一份仓库或目录。它就是 `relationship="active"` 的那个可见 Agent，
+只在 `input/agents/active/` 保存一次；Runtime 把其 Source，以及最近完成 Epoch 获胜分支中产出最佳
+Kernel 的 Trajectory 在该 Epoch 最后一个 Attempt 后的终态 State 复制到 Candidate；下一 Epoch 的
+Active Branch 使用相同 State 种子。缺失终态时依次回退到该 Trajectory 的 Epoch 起始 State、
+Revision Seed 和空默认值。对于
+`evolve_from_history`，Evolver 替换 Source，并可从可见历史
+Trajectory 中整理公共种子。终态输出只声明 `kernel_agent_revision_id`；Runtime 以该 Revision 的 Source
+作为提案参考并验证其身份，
+Runtime State 身份仍作为私有控制数据，并跨不可变 Source
+与初始 Active State 计算真实 Diff。每个新 Revision 都把两个组件封存为一个逻辑 Agent Bundle。不需要也不
+信任任何 Candidate 控制工具或旁路 Base 记录。
 
-Evidence 结构 Prompt Fragment 由 Runtime 编写和物化；本仓库只校验其固定路径与 Manifest 绑定的
-Digest，再拼入最终 Prompt。
+Evidence 结构 Prompt Fragment 由 Runtime 源码模板生成，通过内存传入外层 Bundle 后拼入最终 Prompt。
 
-Coding Agent 输出带判别字段的 `EvolutionOutputV3`：可以从 Active 派生新 Revision、原样复用
+Coding Agent 输出统一格式的 `EvolutionOutput`。所有模式都使用 `kernel_agent_revision_id` 和
+`changed_paths`；后者只报告相对于 Source 根目录的排序路径。复用要求空数组，仅修改 State 的新
+Revision 也可以报告空数组。它可以从 Active 派生新 Revision、原样复用
 一个可见历史 Revision，或从一个可见历史 Revision 派生新 Revision。创建新 Revision 的提案包含
-相对于所选 Base 的准确排序 Changed Paths。每种模式都可以包含有界、结构化的
+相对于所选 Source Base 的准确排序 Changed Paths；Runtime 私下计算 State 修改。每种
+模式都可以包含有界、结构化的
 `unimplemented_capabilities`，记录所需能力、预期 Kernel 优化收益以及本次无法实现的具体原因。
 Runtime 会把这些不可信建议保留在 Evolution Evidence 中，供后续 Evolver 查看；它们不会授予
-额外权限，也不参与胜负选择。Runtime 仍是权威方：它校验冻结可见范围，并要求 Candidate Base
-记录必须与提案形态一致；随后独立 Hash Base 与 Candidate，校验真实修改集合和
+额外权限，也不参与胜负选择。Runtime 仍是权威方：它校验冻结可见范围，随后独立 Hash Base 与
+Candidate，校验真实修改集合和
 Bundle Policy，封存逐 Epoch 提案来源，再运行配置的
 Active/Challenger Pool 评估。Revision 父子关系仍是树；复用和晋升是参赛事件，不是祖先边。
+
+Agent 持续维护 `scratch/evolution-report-draft.json`，并调用只读 Bundle 中固定的
+`python input/evolver/src/runtime_tools.py evolution-report --request
+scratch/evolution-report-draft.json`。调用失败不会发布内容，而是返回 `issues`、准确的
+`request_schema` 和有界 `recovery` 指令；Agent 可修改并重试。第一次成功调用会原子发布
+`scratch/evolution-report.json`，之后再次调用会被拒绝。工具检查真实 Source Diff 与私有初始 State
+快照；Coding Agent 退出后，外层 Bundle 和 Runtime 会再次独立校验。
 
 ## 4. Token 与进程所有权
 

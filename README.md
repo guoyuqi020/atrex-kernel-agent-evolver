@@ -10,21 +10,21 @@ evaluation, scheduling, retention, or promotion authority.
 
 One invocation:
 
-1. validates `EvolutionInputManifestV4` and every Runtime-owned path;
-2. reads the complete Parent repository, the read-only visible Agent revision catalog, and one
-   strict, Epoch-organized Evidence view containing all completed branches, Kernel artifacts, and
-   Agent selection outcomes;
-3. uses Runtime-injected tools to query frozen Agent/Kernel/Epoch history and, when deriving from
-   history, atomically reset the writable Candidate to an eligible historical repository;
+1. validates Runtime-private `EvolutionInputManifestV10` and every Runtime-owned path;
+2. reads the complete Parent repository, current participant repositories, historical Agent
+   repositories, optimization summaries, latest-Epoch Conversations, and runtime state directly
+   from the frozen filesystem;
+3. when deriving from history, replaces writable Candidate source with the selected historical
+   Agent source and may synthesize one common state seed from visible historical state;
 4. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
-5. selects `evolved`, `reuse`, or `evolve_from_history`, permitting changes only in the writable
-   complete Candidate repository when a new revision is proposed and requiring the Runtime reset
-   operation for a historical base;
+5. selects `evolved`, `reuse`, or `evolve_from_history`, permitting changes only in writable
+   `candidate/source/` and `candidate/runtime-state/` when a new revision is proposed;
 6. emits an unredacted Session Artifact containing the rendered Prompt, retained Provider
    stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; the
    high-frequency Claude `system/thinking_tokens` estimate event is intentionally omitted; and
-7. validates the tagged Agent-authored `EvolutionOutputV3` before Runtime independently validates
-   and seals the proposal.
+7. exposes the local `evolution-report` command, which returns structured repair guidance on a
+   failed draft and atomically publishes the first valid `EvolutionOutput`; Runtime then
+   independently validates and seals the proposal.
 
 ## Agent backends
 
@@ -37,9 +37,12 @@ mandatory telemetry, while process wall time and output bounds remain safety lim
 publishes `TokenUsageReportV1` with a null budget; Codex usage and raw rollout capture are obtained
 from its isolated Session Ledger.
 
-The Coding Agent has full design authority over `candidate/`: it may add, replace, reorganize, or
-delete any Optimizer-owned content, including Agent architecture, backend configuration, prompts,
-skills, workflows, tools, memory policy, DSL guidance, tests, and documentation. It may replace the
+The Coding Agent has full design authority over both Candidate components. It may add, replace,
+reorganize, or delete versioned Optimizer content under `candidate/source/`, and it may curate the
+single Skills/Tools checkpoint under `candidate/runtime-state/`. Runtime pairs the complete Source
+and State as one logical Bundle and copies that State into every new Trajectory. Top-level
+`skills/` and `tools/` remain
+invalid in the versioned source. It may replace the
 existing design wholesale when that is the best evidence-backed way to improve Kernel-optimization
 effectiveness or efficiency. The resulting repository must still be a valid Optimizer Bundle. It
 cannot change this Evolver, Runtime, or deployment policy because those files are absent or read-only.
@@ -53,9 +56,9 @@ them in the Candidate. These entries are advisory and grant no additional author
 - `atrex-evolver-bundle.json` declares the single `src/main.py` entrypoint.
 - `atrex-evolver.json` supplies standalone Backend defaults, Prompt, timeout, and output bounds.
 - `prompts/evolve.md` contains the evidence-driven Agent-engineering procedure.
-- Runtime supplies its Agent binding, `ATREX_EVOLUTION_INPUT`, `ATREX_EVOLUTION_CANDIDATE`,
-  `ATREX_EVOLUTION_OUTPUT`, and `ATREX_TOKEN_USAGE_REPORT` plus explicitly
-  allowed provider credentials and isolated-home variables.
+- Runtime supplies its Agent binding, in-memory Evolution manifest and Evidence Prompt, workspace
+  paths, and `ATREX_TOKEN_USAGE_REPORT` plus explicitly allowed provider credentials and
+  isolated-home variables.
 - Runtime stdin must contain only `Run the versioned Evolver Bundle once.`; it cannot replace the
   versioned Prompt.
 

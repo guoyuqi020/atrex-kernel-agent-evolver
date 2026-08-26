@@ -10,18 +10,19 @@ Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、
 
 一次调用会：
 
-1. 严格校验 `EvolutionInputManifestV4` 和所有 Runtime 路径；
-2. 读取完整 Parent 仓库、只读的可见 Agent Revision Catalog，以及严格、按 Epoch 组织且包含
-   所有已完成分支、Kernel Artifact 与 Agent 胜负结果的 Evidence View；
-3. 使用 Runtime 注入的工具查询冻结的 Agent/Kernel/Epoch 历史；从历史派生时，由受约束工具将
-   可写 Candidate 原子切换到合格的历史仓库；
+1. 严格校验 Runtime-private `EvolutionInputManifestV10` 和所有 Runtime 路径；
+2. 直接从冻结文件系统读取完整 Parent、当前参赛仓库、历史 Agent 仓库、优化汇总、最近 Epoch
+   Conversation 和 Runtime State；
+3. 从历史派生时，把所选历史 Agent 的 Source 完整复制到 Candidate，并可从可见历史状态整理一份
+   公共 Candidate 状态种子；
 4. 使用仓库内固定 Prompt 启动一次全新的非交互 Coding Agent；
 5. 从 `evolved`、`reuse`、`evolve_from_history` 中选择一种；需要创建新 Revision 时，只允许修改
-   可写的完整 Candidate 仓库，且历史 Base 必须通过 Runtime Reset 操作加载；
+   `candidate/source/` 与 `candidate/runtime-state/`；
 6. 输出未脱敏 Session Artifact，其中包含最终渲染 Prompt、保留的 Provider
    stdout/stderr、标准化 Usage 索引和严格 Provider Token Report；高频 Claude
    `system/thinking_tokens` 估算事件会被有意省略；
-7. 先校验带判别字段的 `EvolutionOutputV3`，再交给 Runtime 独立验证和封存提案。
+7. 提供本地 `evolution-report` 命令：Draft 失败时返回结构化修复指导，第一次成功时原子发布
+   `EvolutionOutput`；随后 Runtime 再独立验证并封存提案。
 
 ## Agent Backend
 
@@ -31,9 +32,11 @@ Effort 与 Session Settings；空 Model 表示使用 Backend CLI 默认值。四
 仍是必需遥测，进程 Wall Time 与输出限制仍是安全边界。每次运行发布空 Budget 的
 `TokenUsageReportV1`；Codex Usage 与原始 Rollout 从隔离 Session Ledger 获取。
 
-Coding Agent 对 `candidate/` 拥有完整设计权限：可以增加、替换、重组或删除任何 Optimizer
-内容，包括 Agent 架构、Backend 配置、Prompt、Skill、Workflow、Tool、Memory Policy、DSL
-指导、测试和文档。当 Evidence 支持时，它可以整体替换现有设计，以提高 Agent 做 Kernel
+Coding Agent 对 Candidate 的两个组件都拥有设计权限：可以在 `candidate/source/` 中增加、替换、
+重组或删除版本化 Optimizer 内容，也可以直接整理 `candidate/runtime-state/` 中唯一一份 Skills/Tools
+Checkpoint。Runtime 将完整 Source 与 State 组成逻辑 Bundle，并把该 State 复制给所有新 Trajectory。
+版本化 Source 根级仍禁止 `skills/` 与 `tools/`。
+当 Evidence 支持时，它可以整体替换现有设计，以提高 Agent 做 Kernel
 优化的有效性或效率；最终仓库仍必须是有效的 Optimizer Bundle。Evolver、Runtime 与部署策略
 不在 Candidate 内，或者只读，因此不能被它修改。
 

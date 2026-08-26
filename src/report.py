@@ -1,4 +1,4 @@
-"""Bounded EvolutionOutputV3 validation at the Evolver process boundary."""
+"""Bounded EvolutionOutput validation at the Evolver process boundary."""
 
 from __future__ import annotations
 
@@ -30,15 +30,15 @@ def _revision(value: object, label: str, visible_revision_ids: frozenset[str]) -
 
 
 def _changed_paths(value: object) -> list[str]:
-    if not isinstance(value, list) or not 1 <= len(value) <= 512:
-        raise ValueError("changed_paths must contain between 1 and 512 paths")
+    if not isinstance(value, list) or len(value) > 512:
+        raise ValueError("changed_paths must be an array with at most 512 paths")
     normalized: list[str] = []
     for item in value:
         if not isinstance(item, str):
             raise ValueError("changed_paths entries must be strings")
         relative = PurePosixPath(item)
         if relative.is_absolute() or relative.as_posix() == "." or ".." in relative.parts:
-            raise ValueError("changed_paths contains an unsafe path")
+            raise ValueError("changed_paths contains an unsafe Source-root-relative path")
         normalized.append(relative.as_posix())
     if len(set(normalized)) != len(normalized):
         raise ValueError("changed_paths cannot contain duplicates")
@@ -85,11 +85,11 @@ def _validated_output(
     historical_revision_ids: frozenset[str],
     max_bytes: int,
 ) -> dict[str, Any]:
-    """Apply every EvolutionOutputV3 rule, raising a bare ValueError per violation."""
+    """Apply every EvolutionOutput rule, raising a bare ValueError per violation."""
     try:
         metadata = path.lstat()
     except FileNotFoundError as error:
-        raise ValueError("Agent did not produce EvolutionOutputV3") from error
+        raise ValueError("Agent did not produce EvolutionOutput") from error
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
         raise ValueError("Evolution output must be a regular file")
     if metadata.st_size > max_bytes:
@@ -97,38 +97,43 @@ def _validated_output(
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ValueError("Evolution output must be a JSON object")
-    if value.get("schema_version") != 3:
-        raise ValueError("Evolution output schema_version must be 3")
     proposal_type = value.get("proposal_type")
-    common = {"schema_version", "proposal_type", "hypothesis", "expected_effect"}
-    optional = {"unimplemented_capabilities"}
+    fields = {
+        "proposal_type",
+        "kernel_agent_revision_id",
+        "hypothesis",
+        "expected_effect",
+        "changed_paths",
+        "unimplemented_capabilities",
+    }
+    if set(value) != fields:
+        raise ValueError("Evolution output fields are invalid")
     _text(value.get("hypothesis"), "hypothesis", max_length=4000)
     _text(value.get("expected_effect"), "expected_effect", max_length=4000)
-    if "unimplemented_capabilities" in value:
-        _unimplemented_capabilities(value["unimplemented_capabilities"])
+    _unimplemented_capabilities(value["unimplemented_capabilities"])
+    source_reference = _revision(
+        value["kernel_agent_revision_id"],
+        "kernel_agent_revision_id",
+        visible_revision_ids,
+    )
+    changed_paths = _changed_paths(value["changed_paths"])
     if proposal_type == "reuse":
-        required = common | {"candidate_revision_id"}
-        if not required <= set(value) or set(value) - optional != required:
-            raise ValueError("reuse output fields are invalid")
-        candidate = _revision(
-            value["candidate_revision_id"], "candidate_revision_id", visible_revision_ids
-        )
-        if candidate == active_revision_id:
+        if source_reference == active_revision_id:
             raise ValueError("reuse cannot select the current Active revision")
-        if candidate not in historical_revision_ids:
+        if source_reference not in historical_revision_ids:
             raise ValueError("reuse must select completed Lineage history")
+        if changed_paths:
+            raise ValueError("reuse requires changed_paths to be empty")
     elif proposal_type in {"evolved", "evolve_from_history"}:
-        required = common | {"base_revision_id", "changed_paths"}
-        if not required <= set(value) or set(value) - optional != required:
-            raise ValueError(f"{proposal_type} output fields are invalid")
-        base = _revision(value["base_revision_id"], "base_revision_id", visible_revision_ids)
-        if proposal_type == "evolved" and base != active_revision_id:
-            raise ValueError("evolved must use the current Active revision as its base")
-        if proposal_type == "evolve_from_history" and base == active_revision_id:
-            raise ValueError("evolve_from_history must use a historical revision as its base")
-        if proposal_type == "evolve_from_history" and base not in historical_revision_ids:
+        if proposal_type == "evolved" and source_reference != active_revision_id:
+            raise ValueError("evolved must use the current Active Source revision")
+        if proposal_type == "evolve_from_history" and source_reference == active_revision_id:
+            raise ValueError("evolve_from_history must use a historical Source revision")
+        if (
+            proposal_type == "evolve_from_history"
+            and source_reference not in historical_revision_ids
+        ):
             raise ValueError("evolve_from_history must select completed Lineage history")
-        _changed_paths(value["changed_paths"])
     else:
         raise ValueError("proposal_type must be evolved, reuse, or evolve_from_history")
     return value

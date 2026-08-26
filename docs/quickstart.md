@@ -58,24 +58,27 @@ the available partial transcript with `state: interrupted`. The high-frequency C
 `system/thinking_tokens` estimate event is omitted and declared in
 `session.json.provider_event_filters`.
 
-The rendered Session context contains the exact Python command for the Runtime-injected inspection
-client. From the Evolution workspace, append one of these subcommands:
+The rendered Session context lists every authorized Agent repository, optimization summary, Session
+directory, and runtime-state directory. Evolver reads those immutable files directly. Writable
+`candidate/source/` mirrors Active Source. `candidate/runtime-state/{skills,tools}/` starts from the
+latest completed Epoch's winning branch and best-Kernel Trajectory, using its terminal State after
+the last Attempt in that Epoch. The next Epoch's Active Branch uses the same State seed. When no
+terminal checkpoint exists, Runtime falls back to that Trajectory's Epoch-start State, the revision
+seed, and the empty default.
+For `evolve_from_history`, Evolver replaces Source with the selected historical Source
+and may curate the common seed from visible historical Trajectories. Runtime validates the declared
+base and the Source/State Diff independently. Every new revision seals both components as one
+logical Agent Bundle.
+
+Maintain `scratch/evolution-report-draft.json`, then submit it with:
 
 ```bash
-<injected-python> runtime-tools/evolver_tools.py history
-<injected-python> runtime-tools/evolver_tools.py branches --epoch 1
-<injected-python> runtime-tools/evolver_tools.py attempts --epoch 1 --branch challenger-0001
-<injected-python> runtime-tools/evolver_tools.py kernels
-<injected-python> runtime-tools/evolver_tools.py kernel-read --revision kernelrev_<id>
-<injected-python> runtime-tools/evolver_tools.py agents
-<injected-python> runtime-tools/evolver_tools.py agent-diff --base agentrev_<id> --candidate agentrev_<id>
-<injected-python> runtime-tools/evolver_tools.py trace-paths --epoch 1
-<injected-python> runtime-tools/evolver_tools.py candidate-reset --base agentrev_<historical-id>
+python input/evolver/src/runtime_tools.py evolution-report \
+  --request scratch/evolution-report-draft.json
 ```
 
-All commands use only the frozen local snapshot and return JSON; they do not contact Runtime.
-`candidate-reset` is the sole mutation: it is required for `evolve_from_history`, accepts only
-completed Lineage history, and atomically replaces only `candidate/` while recording its base.
+On error, correct the draft using the returned `issues`, `request_schema`, and `recovery`, then
+retry. The first success publishes `scratch/evolution-report.json`; do not call the tool again.
 
 No usage budget is supplied. The schema-v2 usage report remains mandatory with `budget=null` and
 `budget_exhausted=false`. QoderCLI records credits; Claude, Codex, and Pi record provider tokens.

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -19,59 +18,28 @@ from session import execute, render_prompt
 REVISION = "agentrev_0123456789abcdef0123456789abcdef"
 DIGEST = "sha256:" + "a" * 64
 EVIDENCE_PROMPT = "# Evidence input\n\nInjected by the trusted controller.\n"
-EVIDENCE_PROMPT_SHA256 = hashlib.sha256(EVIDENCE_PROMPT.encode()).hexdigest()
 
 
 def _context(tmp_path: Path) -> EvolutionContext:
     workspace = tmp_path / "run"
     for relative in (
-        "input/parent",
-        f"input/agents/{REVISION}",
-        "input/evidence",
-        "runtime-tools/kernels",
-        "candidate",
+        "input/agents/active/source",
+        "input/agents/active/runtime-state/trajectories",
+        "input/historical",
+        "input/evidence/active/sessions",
+        "input/evolution-reports",
+        "candidate/source",
+        "candidate/runtime-state/skills",
+        "candidate/runtime-state/tools",
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    (workspace / "input/evidence/bootstrap").mkdir()
-    (workspace / "input/evidence/epochs").mkdir()
-    (workspace / "input/evidence/instructions.md").write_text(
-        EVIDENCE_PROMPT,
-        encoding="utf-8",
-    )
-    (workspace / "input/evidence/manifest.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "role": "evolver",
-                "lineage_checkpoint": DIGEST,
-                "prompt_fragment_sha256": EVIDENCE_PROMPT_SHA256,
-                "through_completed_epoch": 0,
-                "current_epoch": None,
-                "visibility": {
-                    "completed_epochs": "all_completed_branches",
-                    "current_attempts_before": None,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    (workspace / "runtime-tools/catalog.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "evidence_checkpoint": DIGEST,
-                "agents": [],
-                "kernels": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (workspace / "runtime-tools/evolver_tools.py").write_text("# tool\n")
-    (workspace / "input/parent/atrex-bundle.json").write_text("{}")
-    (workspace / "candidate/atrex-bundle.json").write_text("{}")
+    (workspace / "candidate/runtime-state/tools/README.md").write_text("# Tools\n")
+    (workspace / "input/evidence/active/optimization-summary.json").write_text("{}")
+    (workspace / "input/agents/active/source/atrex-bundle.json").write_text("{}")
+    (workspace / "candidate/source/atrex-bundle.json").write_text("{}")
     manifest = {
-        "schema_version": 4,
+        "schema_version": 10,
         "parent_revision_id": REVISION,
         "evidence_checkpoint": DIGEST,
         "idempotency_key": "epoch:test:challenger",
@@ -80,8 +48,12 @@ def _context(tmp_path: Path) -> EvolutionContext:
         "visible_agents": [
             {
                 "revision_id": REVISION,
+                "version": None,
                 "optimizer_digest": DIGEST,
-                "path": f"input/agents/{REVISION}",
+                "path": "input/agents/active/source",
+                "optimization_summary_path": "input/evidence/active/optimization-summary.json",
+                "sessions_path": "input/evidence/active/sessions",
+                "runtime_state_path": "input/agents/active/runtime-state",
                 "parent": True,
                 "relationship": "active",
                 "challenger_ordinal": None,
@@ -90,23 +62,21 @@ def _context(tmp_path: Path) -> EvolutionContext:
             }
         ],
         "paths": {
-            "parent": "input/parent",
             "agents": "input/agents",
+            "historical": "input/historical",
             "evidence": "input/evidence",
-            "runtime_tools": "runtime-tools",
             "candidate": "candidate",
             "scratch": "scratch",
-            "output": "scratch/evolution-output.json",
+            "output": "scratch/evolution-report.json",
         },
     }
-    manifest_path = workspace / "evolution-input.json"
-    manifest_path.write_text(json.dumps(manifest))
     return EvolutionContext.load(
         {
-            "ATREX_EVOLUTION_INPUT": str(manifest_path),
+            "ATREX_EVOLUTION_INPUT_JSON": json.dumps(manifest),
+            "ATREX_EVOLUTION_WORKSPACE": str(workspace),
             "ATREX_EVOLUTION_CANDIDATE": str(workspace / "candidate"),
-            "ATREX_EVOLUTION_OUTPUT": str(workspace / "scratch/evolution-output.json"),
-            "ATREX_EVIDENCE_PROMPT_PATH": str(workspace / "input/evidence/instructions.md"),
+            "ATREX_EVOLUTION_OUTPUT": str(workspace / "scratch/evolution-report.json"),
+            "ATREX_EVIDENCE_PROMPT": EVIDENCE_PROMPT,
             "ATREX_TOKEN_USAGE_REPORT": str(workspace / "scratch/token-usage.json"),
         }
     )
@@ -121,18 +91,18 @@ import os
 import sys
 from pathlib import Path
 
-candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
+assert not any(key.startswith("ATREX_") for key in os.environ)
+assert "EVOLUTION_REPORT_CONTEXT_JSON" in os.environ
+candidate = Path("candidate/source")
 (candidate / "prompts").mkdir(exist_ok=True)
 (candidate / "prompts/evolve-result.md").write_text("new policy\\n")
-Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
-    "schema_version": 3,
+Path("scratch/evolution-report.json").write_text(json.dumps({
     "proposal_type": "evolved",
-    "base_revision_id": json.loads(
-        Path(os.environ["ATREX_EVOLUTION_INPUT"]).read_text()
-    )["parent_revision_id"],
+    "kernel_agent_revision_id": "agentrev_0123456789abcdef0123456789abcdef",
     "hypothesis": "Use a narrower evidence-driven search policy.",
     "expected_effect": "Reduce repeated failed optimization directions.",
     "changed_paths": ["prompts/evolve-result.md"],
+    "unimplemented_capabilities": [],
 }))
 print(json.dumps({
     "type": "system",
@@ -182,17 +152,16 @@ import json
 import os
 from pathlib import Path
 
-candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
+candidate = Path("candidate/source")
 (candidate / "prompts").mkdir(exist_ok=True)
 (candidate / "prompts/evolve-result.md").write_text("unbounded policy\\n")
-manifest = json.loads(Path(os.environ["ATREX_EVOLUTION_INPUT"]).read_text())
-Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
-    "schema_version": 3,
+Path("scratch/evolution-report.json").write_text(json.dumps({
     "proposal_type": "evolved",
-    "base_revision_id": manifest["parent_revision_id"],
+    "kernel_agent_revision_id": "agentrev_0123456789abcdef0123456789abcdef",
     "hypothesis": "Continue until the evolution direction is complete.",
     "expected_effect": "Avoid terminating evolution due to provider token count.",
     "changed_paths": ["prompts/evolve-result.md"],
+    "unimplemented_capabilities": [],
 }))
 
 print(json.dumps({
@@ -229,17 +198,16 @@ print(json.dumps({{"type": "assistant", "live": "first provider event"}}), flush
 Path({str(ready)!r}).write_text("ready")
 while not Path({str(release)!r}).exists():
     time.sleep(0.01)
-candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
+candidate = Path("candidate/source")
 (candidate / "prompts").mkdir(exist_ok=True)
 (candidate / "prompts/evolve-result.md").write_text("live policy\\n")
-manifest = json.loads(Path(os.environ["ATREX_EVOLUTION_INPUT"]).read_text())
-Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({{
-    "schema_version": 3,
+Path("scratch/evolution-report.json").write_text(json.dumps({{
     "proposal_type": "evolved",
-    "base_revision_id": manifest["parent_revision_id"],
+    "kernel_agent_revision_id": "agentrev_0123456789abcdef0123456789abcdef",
     "hypothesis": "Stream the Evolver trace while it runs.",
     "expected_effect": "Make active evolution sessions inspectable.",
     "changed_paths": ["prompts/evolve-result.md"],
+    "unimplemented_capabilities": [],
 }}))
 print(json.dumps({{"type": "result", "usage": {{
     "input_tokens": 1,
@@ -277,7 +245,7 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
 
     assert execute(context, config) == 0
 
-    assert (context.candidate_root / "prompts/evolve-result.md").is_file()
+    assert (context.candidate_root / "source/prompts/evolve-result.md").is_file()
     usage = json.loads(context.token_usage_path.read_text())
     assert usage["usage_unit"] == "provider_tokens"
     assert usage["consumed"] == 28
@@ -287,6 +255,7 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
     prompt = (context.session_trace_path / "input/prompt.md").read_text()
     assert "Fixed evolution instructions." in prompt
     assert '"dsl": "triton"' in prompt
+    assert '"evolution_number": 1' in prompt
     provider_stdout = (context.session_trace_path / "provider/stdout.stream-json").read_text()
     assert "raw hidden reasoning" in provider_stdout
     assert "raw-tool-secret" in provider_stdout
@@ -409,23 +378,38 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     )
     prompt = render_prompt(context, config)
 
-    assert "# Binding DSL constraint" in prompt
-    assert "authoritative and immutable" in prompt
+    assert "# Boundaries" in prompt
+    assert "`dsl` is immutable" in prompt
     assert "Do not redirect the Optimizer to another DSL" in prompt
-    assert "Actively eliminate redundant Harness design" in prompt
+    assert "add, replace, reorganize, or delete any Agent-owned Source" in prompt
+    assert "Runtime evaluates the Candidate in the next Epoch" in prompt
     assert EVIDENCE_PROMPT.rstrip() in prompt
     assert '"dsl": "triton"' in prompt
     assert "gateway" not in prompt.lower().split("# session context", 1)[1]
     assert "wiki" not in prompt.lower().split("# session context", 1)[1]
-    assert "input/parent" in prompt
-    assert f"input/agents/{REVISION}" in prompt
-    assert "runtime-tools/evolver_tools.py" in prompt
-    assert "frozen_evidence_and_candidate_control" in prompt
-    assert "# Runtime capabilities" in prompt
-    assert "connect a best Kernel revision" in prompt
-    assert "not a mandatory call sequence" in prompt
-    assert "candidate-reset --base" in prompt
-    assert "Do not copy, delete, or reconstruct" in prompt
+    assert '"source_path": "input/agents/active/source"' in prompt
+    assert '"relationship": "active"' in prompt
+    assert '"source_parent_revision_id": null' in prompt
+    assert '"optimization_summary_path": "input/evidence/active/' in prompt
+    assert '"sessions_path": "input/evidence/active/sessions"' in prompt
+    assert '"runtime_state_path": "input/agents/active/runtime-state"' in prompt
+    assert '"evolution_reports": "input/evolution-reports"' in prompt
+    assert "Compare each prior report's" in prompt
+    assert "identify its actual Source change" in prompt
+    assert "intentionally\n   omit Revision IDs" not in prompt
+    assert '"optimizer_digest"' not in prompt.split("# Session context", 1)[1]
+    assert '"created_by"' not in prompt.split("# Session context", 1)[1]
+    assert "input/parent" not in prompt
+    assert "input/reusable-agents" not in prompt
+    assert "evolution-input.json" not in prompt
+    assert "runtime-tools" not in prompt
+    assert "candidate-reset" not in prompt
+    assert "Do not place top-level `skills/` or `tools/`" in prompt
+    assert "candidate/runtime-state/" in prompt
+    assert "reusable `skills/` and `tools/` seed" in prompt
+    assert "input/evolver/src/runtime_tools.py evolution-report" in prompt
+    assert "scratch/evolution-report-draft.json" in prompt
+    assert "never write `scratch/evolution-report.json` directly" in prompt
     assert "candidate" in prompt
 
 
@@ -463,10 +447,11 @@ def test_repository_entrypoint_runs_the_fixed_bundle_contract(tmp_path: Path) ->
     environment.update(
         {
             "PATH": f"{tmp_path}{os.pathsep}{environment.get('PATH', '')}",
-            "ATREX_EVOLUTION_INPUT": str(context.manifest_path),
+            "ATREX_EVOLUTION_INPUT_JSON": json.dumps(context.manifest),
+            "ATREX_EVOLUTION_WORKSPACE": str(context.workspace),
             "ATREX_EVOLUTION_CANDIDATE": str(context.candidate_root),
             "ATREX_EVOLUTION_OUTPUT": str(context.output_path),
-            "ATREX_EVIDENCE_PROMPT_PATH": str(context.evidence_root / "instructions.md"),
+            "ATREX_EVIDENCE_PROMPT": context.evidence_prompt,
             "ATREX_TOKEN_USAGE_REPORT": str(context.token_usage_path),
         }
     )

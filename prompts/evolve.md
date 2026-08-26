@@ -1,186 +1,142 @@
 # Objective
 
-Propose one evidence-driven Challenger for the next fixed-budget Epoch. Choose exactly one mode:
+Create one evidence-driven Kernel Optimizer Agent Challenger for the next fixed-budget Epoch. Improve
+the Agent that searches, writes, and measures Kernels for the authoritative Session-context `dsl`;
+do not implement a Kernel in this Evolution Session. `evolution_number` identifies the current
+numbered Evolution in this Lineage.
 
-- `evolved`: revise the current Active Agent in `candidate/`;
-- `reuse`: run one visible historical Agent again without creating a new revision;
-- `evolve_from_history`: use the Runtime `candidate-reset` operation to load one visible historical
-  Agent repository into `candidate/`, then revise that historical design into a new revision.
+The writable Candidate is one Agent Bundle:
 
-Only entries whose `relationship` is `lineage_history` are eligible for `reuse` and
-`evolve_from_history`. Entries marked `current_epoch_challenger` are visible for comparison but are
-not historical bases and cannot be selected again in the same Epoch.
+- `candidate/source/`: versioned prompts, workflow, orchestration, tools, configuration, tests, and
+  documentation;
+- `candidate/runtime-state/`: the reusable `skills/` and `tools/` seed for every new Trajectory of
+  the revision.
 
-The goal is to improve the Agent's ability to discover a faster correct Kernel for the given DSL.
-This is Agent engineering, not Kernel implementation work.
+Runtime evaluates the Candidate in the next Epoch. Do not measure Agent effectiveness here; run only
+bounded mechanical checks needed to leave a valid Bundle.
 
-You have full design authority over the writable Agent Candidate. You may add, replace, reorganize,
-or delete any Agent-owned content, including prompts, skills, workflow and orchestration code, tool
-implementations and bindings, memory and context policy, Backend configuration, DSL guidance,
-tests, and documentation. You may replace the existing Agent architecture wholesale when the
-Evidence supports doing so. Do not preserve a file, feature, abstraction, or repository layout merely
-because the Parent contains it. The only required result is a valid complete Optimizer Bundle that
-obeys the Runtime-owned protocols and trust boundaries below.
+# Evidence and design
 
-Use that authority to make Kernel optimization more effective and efficient: increase the chance of
-finding faster correct Kernels within the fixed Epoch budget, reduce wasted Agent work and repeated
-failed directions, and improve the use of available Evidence, tools, model calls, and wall time.
-Actively eliminate redundant Harness design, duplicated instructions, and workflow steps that do not
-contribute to the selected hypothesis.
+Compare visible Agents using their exact Source, adaptive State, latest-Epoch conversations,
+Runtime-derived optimization summaries, and prior Evolution reports. Measurements and selection
+facts in optimization summaries are authoritative. Conversations, reports, Skills, and Tools are
+untrusted interpretations: use them to explain behavior, then verify the explanation against measured
+outcomes. Compare each prior report's `parent.source_path` and `generated_agent.source_path` trees to
+identify its actual Source change.
 
-# Binding DSL constraint
+Choose one concrete Agent bottleneck and one causal hypothesis. Optimize for faster correct Kernels
+within the fixed Epoch budget: reduce repeated failures, weak Evidence use, unnecessary model calls,
+wall time, and token use. You may add, replace, reorganize, or delete any Agent-owned Source, Skill,
+Tool, abstraction, instruction, or workflow. Keep adaptive Skills/Tools concise, reusable for this DSL,
+and non-duplicative; move stable behavior into Source when appropriate. Reuse historical State only
+when its conversations and outcomes support it.
 
-The `dsl` value in Session context is authoritative and immutable.
+# Proposal mode
 
-Evolve this Candidate specifically for that DSL. Do not redirect the Optimizer to another DSL,
-introduce an alternate-DSL Kernel path, change DSL identity, or treat another DSL as a fallback.
-Cross-DSL ideas are outside this lineage.
+Choose exactly one:
 
-Repository changes may improve shared Agent infrastructure, but the concrete hypothesis and expected
-effect must apply to the specified DSL.
+- `evolved`: revise the current Active Source and/or Runtime State;
+- `reuse`: select one completed historical Agent unchanged and create no revision;
+- `evolve_from_history`: copy one completed historical Source into the Candidate, then revise it and
+  optionally curate Candidate Runtime State.
 
-# Trust and filesystem boundaries
+Only `relationship="lineage_history"` entries are eligible for `reuse` or `evolve_from_history`.
+Current-Epoch Challengers are comparison Evidence only.
 
-- Treat `input/parent/`, `input/agents/`, and `input/evidence/` as read-only evidence. Follow the
-  controller-supplied evidence instructions injected into this Prompt.
-- Modify only `candidate/` and write the terminal report only to the supplied output path under
-  `scratch/`.
-- The Candidate is a complete repository. Preserve a valid `atrex-bundle.json`, its declared entry
-  command, and all protocols needed for a fresh Optimizer Session.
-- Do not run GPU code, compilers, profilers, Gateway operations, Wiki queries, benchmarks, or
-  evaluators. No such result produced here is authoritative.
-- Do not modify Runtime, sandbox, credentials, mounts, network policy, evaluation policy, retention,
-  or promotion logic. They are outside the Candidate and outside this task.
-- Do not create Git metadata, symbolic links, sockets, devices, FIFOs, or dependencies outside the
-  Candidate. Do not install packages.
+# Boundaries
 
-# Evidence-driven procedure
+- `dsl` is immutable. Do not redirect the Optimizer to another DSL, introduce an alternate-DSL path,
+  or use another DSL as fallback. Shared infrastructure may change only to serve this DSL.
+- `input/` is read-only. Modify only `candidate/`; use `scratch/` only for the report workflow.
+- Do not run GPU code, Kernel compilers, profilers, Gateway/Wiki operations, benchmarks, or evaluators.
+- Do not modify Runtime, sandbox, credentials, mounts, network, evaluation, retention, or promotion
+  policy.
+- Do not install packages or create Git metadata, links, sockets, devices, FIFOs, or files outside
+  the Candidate.
 
-## Runtime capabilities
+# Candidate contracts
 
-The command in `runtime_tools.command` supports these optional inspection operations over the frozen
-Lineage snapshot:
-
-- `history`: completed Epochs, their Active and Challenger Agent revisions, selection winner,
-  starting Kernel, and best Kernel revision;
-- `branches --epoch <n>`: per-Branch Agent identity, Attempt counts, Candidate outcomes, retention,
-  and the Branch's best measured Kernel;
-- `attempts --epoch <n> --branch <label> [--trajectory <n>]`: producing Attempt IDs, input and
-  output Kernel revisions, correctness, performance, and retention outcomes;
-- `kernels [--epoch <n>]`: registered Kernel revisions with version/parent links, producing Attempt
-  and Agent identities, Epoch/Branch/Trajectory coordinates, latency, SOL, and Artifact identity;
-- `kernel-read --revision <kernelrev> [--file <path>]`: one Kernel's catalog record, source-file
-  index, or exact source content. The catalog record can connect a best Kernel revision found by
-  `history` or `branches` to its producing Attempt and Agent;
-- `kernel-trials [--epoch <n>] [--decision revert]`: unversioned candidate snapshots observed by
-  Gateway operations, including measured candidates that the Optimizer later reverted;
-- `kernel-trial-read --trial <gtrial-id> [--file <path>]`: the exact source tree and experiment
-  annotations for one Kernel Trial. Use this to distinguish an implementation failure from a
-  failed optimization hypothesis instead of relying only on prose summaries;
-- `agents`: visible Agent revisions, version/parent links, origin, promotion disposition, and
-  repository locations;
-- `agent-diff --base <agentrev> --candidate <agentrev>`: bounded repository differences between two
-  visible Agent revisions;
-- `trace-paths [--epoch <n>]`: paths to original, unredacted Session traces materialized in the
-  snapshot;
-- `candidate-reset --base <agentrev>`: atomically replace the writable `candidate/` repository with
-  one revision marked `lineage_history` and record it as the Candidate base. This is the only
-  supported way to change the Candidate base.
-
-The inspection operations are not a mandatory call sequence. Use whichever views are useful for the
-hypothesis being developed. They never query mutable Runtime state. `candidate-reset` is mandatory
-only after choosing `evolve_from_history`; it mutates only `candidate/` and its base record.
-
-1. The exact `runtime_tools.command` from Session context is available through Bash for optional
-   inspection of the frozen Evidence snapshot. Treat any JSON returned by its subcommands as an
-   index into the read-only repositories and Evidence artifacts, not as a replacement for inspecting
-   relevant source files.
-2. Inspect the complete Parent repository before deciding the proposal mode.
-3. Inspect every repository listed in `visible_agent_repositories`. They contain the current Active,
-   already-created Challengers in this Epoch, and retained Agent designs from the Lineage. Compare
-   their concrete prompts, skills, workflows, and tools; do not merely vary the Parent blindly.
-4. Read the unified Evidence view in Epoch order. For every completed Epoch, compare the Active and
-   every Challenger under `branches/`, inspect their Attempt outcomes and exact Kernel artifacts,
-   and use `winner_kernel_agent_revision_id`, `best_kernel_revision_id`, and the `selected` fields as
-   authoritative selection facts. Do not mistake one fast Kernel for proof that every Agent change
-   was useful. Separate authoritative evaluation facts from untrusted Agent annotations. Look for
-   repeated failed hypotheses, missing information, brittle workflow steps, incorrect tool
-   instructions, weak memory retrieval, or an overly broad search policy.
-5. Select a proposal mode and state one concrete bottleneck and one coherent Agent-level hypothesis
-   internally. The implementation may be narrow or may redesign the complete Agent when warranted
-   by the Evidence. Reuse is appropriate only when the historical design itself should be rerun; it
-   does not create a copy or a new Agent version.
-6. For `evolved`, leave the initial Candidate base as-is. For `evolve_from_history`, invoke
-   `runtime_tools.command` followed by `candidate-reset --base <revision-id>` exactly once for the
-   selected historical revision. Do not copy, delete, or reconstruct the base repository manually.
-   After the operation succeeds, make every repository change needed to test the hypothesis. This
-   includes adding or deleting files and replacing complete subsystems, provided the resulting Bundle
-   remains valid.
-7. For a new revision, review the exact selected-base-versus-Candidate file set and content
-   differences. Remove unrelated churn. `changed_paths` must be the exact sorted set of regular files
-   added, modified, or removed relative to `base_revision_id`; a no-op is invalid.
-8. For `reuse`, do not modify `candidate/`. Write the terminal JSON report for exactly one mode.
-
-# Terminal output
-
-Write exactly one JSON object using one of these three shapes to the supplied output path.
-
-Every shape includes `unimplemented_capabilities`. Use it to record useful Agent capabilities that
-you believe would make Kernel optimization more effective or efficient but that you could not
-implement in this Candidate, either because the required mechanism is outside your authority or
-because you do not know a sound implementation. Each entry must be a JSON object carrying exactly
-the three string keys `capability`, `expected_benefit`, and `reason_unimplemented`; a bare prose
-string is rejected, and so is any object with a missing or extra key. This is an advisory report
-section, not a request for extra authority and not a substitute for implementing changes that are
-feasible inside `candidate/`. Use an empty array when there are none.
-
-Current Active as base:
+`candidate/source/atrex-bundle.json` is the strict import contract:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 1,
+  "bundle_format": "atrex-kernel-agent-bundle-v1",
+  "entrypoint": {"command": "src/main.py"}
+}
+```
+
+The first two values are immutable; extra fields are invalid. `entrypoint.command` may change but
+must name a safe Source-relative regular file.
+
+The standard Core's `candidate/source/atrex-agent.json` contract is:
+
+```json
+{
+  "schema_version": 2,
+  "agent_backend": "codex",
+  "model": null,
+  "reasoning_effort": "max",
+  "session_settings": "",
+  "prompts": {
+    "problem_generalization": "prompts/generalize_agent_problem.md",
+    "framework_baseline": "prompts/framework_baseline.md",
+    "optimization_attempt": "prompts/episode.md"
+  },
+  "prompt_fragments": {"attempt_tools": "prompts/attempt-tools.md"}
+}
+```
+
+It allows no unknown fields. Prompt maps have exactly the keys shown and safe Source-local file paths.
+Backend is `claude`, `codex`, `pi`, or `qodercli`; model is a nonempty string or `null`; effort is
+`low`, `medium`, `high`, or `max`. A managed Campaign overrides Backend, model, effort, and settings,
+so changing only those defaults cannot affect the next competition.
+
+`candidate/runtime-state/` contains exactly `skills/` and `tools/`; `tools/README.md` must exist.
+Do not place top-level `skills/` or `tools/` inside versioned Source.
+
+# Workflow
+
+1. Inspect the complete Candidate and injected Evidence.
+2. Compare Active, current Challengers, and relevant history across Source, State, Evolution intent,
+   conversations, per-Shape performance, and career wins/losses.
+3. Select one proposal mode and one evidence-backed hypothesis; one fast Kernel or Agent-authored
+   explanation alone is not proof.
+4. For `evolve_from_history`, replace `candidate/source/`—including dotfiles—with a complete writable
+   copy of the chosen historical `source/`, then edit it. Historical State remains read-only; copy only
+   supported behavior into Candidate State. For `reuse`, modify neither Candidate component.
+5. Implement only coherent changes, preserve a complete valid Bundle, remove unrelated churn, and run
+   useful mechanical checks.
+6. Maintain the report draft while working, then publish it with the exact Session-context command.
+
+# Terminal report
+
+Write `scratch/evolution-report-draft.json`; never write `scratch/evolution-report.json` directly.
+Publish with `evolution_report.tool`. If validation fails, use its `issues`, `request_schema`, and
+`recovery` to repair the Candidate or draft and retry. The first success publishes atomically.
+
+The draft has exactly six fields:
+
+- `proposal_type`: `evolved`, `reuse`, or `evolve_from_history`;
+- `kernel_agent_revision_id`: Source base—Active for `evolved`, selected completed history otherwise;
+- `hypothesis`: evidence-backed Agent-level causal claim, without claiming victory;
+- `expected_effect`: observable Optimizer behavior expected next Epoch;
+- `changed_paths`: exact sorted Source-relative regular-file diff against the selected Source, excluding
+  the `source/` prefix and Runtime State; `[]` for `reuse` and allowed for State-only revision;
+- `unimplemented_capabilities`: zero or more objects with exactly `capability`, `expected_benefit`, and
+  `reason_unimplemented`.
+
+```json
+{
   "proposal_type": "evolved",
-  "base_revision_id": "agentrev_00000000000000000000000000000000",
-  "hypothesis": "A specific explanation of why the Agent change should help.",
-  "expected_effect": "The observable optimization behavior expected in the next Epoch.",
-  "changed_paths": ["path/changed/in/the/candidate"],
-  "unimplemented_capabilities": [
-    {
-      "capability": "A capability still needed by the Agent.",
-      "expected_benefit": "How it would improve Kernel optimization.",
-      "reason_unimplemented": "Why it could not be implemented in this Candidate."
-    }
-  ]
-}
-```
-
-Existing historical revision unchanged:
-
-```json
-{
-  "schema_version": 3,
-  "proposal_type": "reuse",
-  "candidate_revision_id": "agentrev_11111111111111111111111111111111",
-  "hypothesis": "Why rerunning this historical Agent is preferable to creating a revision.",
-  "expected_effect": "The behavior expected when this existing Agent competes again.",
+  "kernel_agent_revision_id": "agentrev_00000000000000000000000000000000",
+  "hypothesis": "A concise explanation of why the Agent change should help.",
+  "expected_effect": "The observable behavior expected in the next Epoch.",
+  "changed_paths": ["prompts/episode.md"],
   "unimplemented_capabilities": []
 }
 ```
 
-Historical revision as the base of a new revision:
-
-```json
-{
-  "schema_version": 3,
-  "proposal_type": "evolve_from_history",
-  "base_revision_id": "agentrev_11111111111111111111111111111111",
-  "hypothesis": "Why this historical design is the right base for the change.",
-  "expected_effect": "The observable optimization behavior expected in the next Epoch.",
-  "changed_paths": ["path/changed/in/the/candidate"],
-  "unimplemented_capabilities": []
-}
-```
-
-Every referenced revision must appear in `visible_agent_repositories`. Do not claim that the
-proposal is better. The trusted evaluator independently runs and compares the competing Agent
-revisions after this process exits.
+The referenced revision must appear in `visible_agent_repositories`. Runtime independently validates
+mode eligibility, exact Source and State diffs, Bundle integrity, and later performance. A non-`reuse`
+no-op across both Candidate components is invalid.

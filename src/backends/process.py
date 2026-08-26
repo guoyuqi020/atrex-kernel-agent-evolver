@@ -347,9 +347,7 @@ def run_bounded(
     max_stderr_chars: int | None = None,
 ) -> ProcessResult:
     """Run a guarded command with live output observation and a wall deadline."""
-    max_stderr_chars = (
-        MAX_STDERR_CAPTURE_CHARS if max_stderr_chars is None else max_stderr_chars
-    )
+    max_stderr_chars = MAX_STDERR_CAPTURE_CHARS if max_stderr_chars is None else max_stderr_chars
     if max_stderr_chars <= 0:
         raise ValueError("Provider stderr limit must be positive")
     proc = subprocess.Popen(

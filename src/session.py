@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import shutil
-import sys
 import tempfile
 import uuid
 from pathlib import Path, PurePosixPath
@@ -73,30 +72,35 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
     """Append only the minimal Runtime-authored context to the fixed repository Prompt."""
     template = config.prompt_path.read_text(encoding="utf-8")
     visible = {
-        "schema_version": 1,
         "dsl": context.dsl,
-        "parent_revision_id": context.parent_revision_id,
-        "parent_repository": "input/parent",
+        "evolution_number": context.evolution_number,
         "visible_agent_repositories": [
             {
                 "revision_id": item.revision_id,
-                "optimizer_digest": item.optimizer_digest,
-                "path": item.path,
-                "parent": item.parent,
+                "version": item.version,
                 "relationship": item.relationship,
-                "challenger_ordinal": item.challenger_ordinal,
-                "parent_revision_id": item.parent_revision_id,
-                "created_by": item.created_by,
+                "source_parent_revision_id": item.parent_revision_id,
+                "source_path": item.path,
+                "optimization_summary_path": item.optimization_summary_path,
+                "sessions_path": item.sessions_path,
+                "runtime_state_path": item.runtime_state_path,
             }
             for item in context.visible_agents
         ],
         "evidence": "input/evidence",
-        "runtime_tools": {
-            "command": [sys.executable, "runtime-tools/evolver_tools.py"],
-            "scope": "frozen_evidence_and_candidate_control",
+        "evolution_reports": "input/evolution-reports",
+        "candidate": {
+            "source": "candidate/source",
+            "runtime_state": "candidate/runtime-state",
         },
-        "candidate_repository": "candidate",
-        "output": "scratch/evolution-output.json",
+        "evolution_report": {
+            "draft": "scratch/evolution-report-draft.json",
+            "tool": (
+                "python input/evolver/src/runtime_tools.py evolution-report "
+                "--request scratch/evolution-report-draft.json"
+            ),
+            "published": "scratch/evolution-report.json",
+        },
     }
     return (
         template.rstrip()
@@ -105,6 +109,44 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
         + "\n\n# Session context\n\n```json\n"
         + json.dumps(visible, ensure_ascii=False, sort_keys=True, indent=2)
         + "\n```\n"
+    )
+
+
+def _prepare_evolution_report_tool(
+    context: EvolutionContext,
+    config: EvolverConfig,
+) -> tuple[tuple[str, str], ...]:
+    """Freeze the initial Candidate State and pass only safe report-validation context."""
+    support_root = context.scratch_root / ".evolution-report"
+    state_base = support_root / "runtime-state-base"
+    if support_root.exists() or support_root.is_symlink():
+        raise ValueError("Evolution report support path already exists")
+    support_root.mkdir(mode=0o700)
+    shutil.copytree(context.candidate_root / "runtime-state", state_base)
+    for path in sorted(state_base.rglob("*"), reverse=True):
+        path.chmod(0o500 if path.is_dir() else 0o400)
+    state_base.chmod(0o500)
+    value = {
+        "active_revision_id": context.parent_revision_id,
+        "visible_agents": [
+            {
+                "revision_id": item.revision_id,
+                "relationship": item.relationship,
+                "source_path": item.path,
+            }
+            for item in context.visible_agents
+        ],
+        "candidate_source": "candidate/source",
+        "candidate_runtime_state": "candidate/runtime-state",
+        "runtime_state_base": "scratch/.evolution-report/runtime-state-base",
+        "report_path": "scratch/evolution-report.json",
+        "max_report_bytes": config.max_output_manifest_bytes,
+    }
+    return (
+        (
+            "EVOLUTION_REPORT_CONTEXT_JSON",
+            json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        ),
     )
 
 
@@ -421,6 +463,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
     live_trace = False
     try:
         prompt = render_prompt(context, config)
+        report_tool_environment = _prepare_evolution_report_tool(context, config)
 
         def run_provider(
             command: list[str],
@@ -463,12 +506,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 model=config.model,
                 usage_budget=None,
                 live_trace_path=context.session_trace_path,
-                environment=(
-                    ("ATREX_EVOLUTION_INPUT", str(context.manifest_path)),
-                    ("ATREX_EVOLUTION_CANDIDATE", str(context.candidate_root)),
-                    ("ATREX_EVOLUTION_OUTPUT", str(context.output_path)),
-                    ("ATREX_TOKEN_USAGE_REPORT", str(context.token_usage_path)),
-                ),
+                environment=report_tool_environment,
             )
         )
         _write_trace(context, result, prompt, config, replace_live=live_trace)

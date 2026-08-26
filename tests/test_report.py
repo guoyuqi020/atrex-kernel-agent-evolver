@@ -28,12 +28,12 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
     path.write_text(
         json.dumps(
             {
-                "schema_version": 3,
                 "proposal_type": "evolved",
-                "base_revision_id": ACTIVE,
+                "kernel_agent_revision_id": ACTIVE,
                 "hypothesis": "Tighten the search policy.",
                 "expected_effect": "Fewer repeated unsuccessful changes.",
                 "changed_paths": ["src/workflow.py", "prompts/episode.md"],
+                "unimplemented_capabilities": [],
             }
         )
     )
@@ -45,9 +45,8 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
     "value",
     [
         {
-            "schema_version": 3,
             "proposal_type": "evolved",
-            "base_revision_id": ACTIVE,
+            "kernel_agent_revision_id": ACTIVE,
             "hypothesis": "Tighten the search policy.",
             "expected_effect": "Fewer repeated unsuccessful changes.",
             "changed_paths": ["prompts/episode.md", "src/workflow.py"],
@@ -60,23 +59,32 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             ],
         },
         {
-            "schema_version": 3,
-            "proposal_type": "reuse",
-            "candidate_revision_id": HISTORICAL,
-            "hypothesis": "Retry a previously strong design.",
-            "expected_effect": "Recover its prior search behavior.",
+            "proposal_type": "evolved",
+            "kernel_agent_revision_id": ACTIVE,
+            "hypothesis": "Curate only the reusable Runtime State seed.",
+            "expected_effect": "Start the next Epoch with a better reusable procedure.",
+            "changed_paths": [],
+            "unimplemented_capabilities": [],
         },
         {
-            "schema_version": 3,
+            "proposal_type": "reuse",
+            "kernel_agent_revision_id": HISTORICAL,
+            "hypothesis": "Retry a previously strong design.",
+            "expected_effect": "Recover its prior search behavior.",
+            "changed_paths": [],
+            "unimplemented_capabilities": [],
+        },
+        {
             "proposal_type": "evolve_from_history",
-            "base_revision_id": HISTORICAL,
+            "kernel_agent_revision_id": HISTORICAL,
             "hypothesis": "Repair the historical design's one weak step.",
             "expected_effect": "Retain its strengths with fewer repeated trials.",
             "changed_paths": ["prompts/episode.md"],
+            "unimplemented_capabilities": [],
         },
     ],
 )
-def test_output_accepts_all_strict_protocol_v3_modes(
+def test_output_accepts_all_strict_modes(
     tmp_path: Path, value: dict[str, object]
 ) -> None:
     path = tmp_path / "output.json"
@@ -89,11 +97,12 @@ def test_output_rejects_revision_outside_frozen_visibility(tmp_path: Path) -> No
     path.write_text(
         json.dumps(
             {
-                "schema_version": 3,
                 "proposal_type": "reuse",
-                "candidate_revision_id": "agentrev_22222222222222222222222222222222",
+                "kernel_agent_revision_id": "agentrev_22222222222222222222222222222222",
                 "hypothesis": "Unknown Agent.",
                 "expected_effect": "None.",
+                "changed_paths": [],
+                "unimplemented_capabilities": [],
             }
         )
     )
@@ -106,11 +115,11 @@ def test_output_rejects_malformed_unimplemented_capability(tmp_path: Path) -> No
     path.write_text(
         json.dumps(
             {
-                "schema_version": 3,
                 "proposal_type": "reuse",
-                "candidate_revision_id": HISTORICAL,
+                "kernel_agent_revision_id": HISTORICAL,
                 "hypothesis": "Retry a previously strong design.",
                 "expected_effect": "Recover its prior search behavior.",
+                "changed_paths": [],
                 "unimplemented_capabilities": [
                     {
                         "capability": "Profiler-guided search.",
@@ -130,9 +139,8 @@ def test_contract_violations_name_the_offending_field(tmp_path: Path) -> None:
     path.write_text(
         json.dumps(
             {
-                "schema_version": 3,
                 "proposal_type": "evolved",
-                "base_revision_id": ACTIVE,
+                "kernel_agent_revision_id": ACTIVE,
                 "hypothesis": "Bundle reusable skills into the sealed repository.",
                 "expected_effect": "Spend less budget rebuilding apparatus.",
                 "changed_paths": ["prompts/episode.md"],

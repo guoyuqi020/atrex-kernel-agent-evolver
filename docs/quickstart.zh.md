@@ -54,24 +54,25 @@ Adapter 实现和版本化 Prompt。
 Transcript，并标记为 `state: interrupted`。高频 Claude `system/thinking_tokens` 估算事件会被
 省略，并在 `session.json.provider_event_filters` 中声明。
 
-渲染后的 Session Context 包含 Runtime 注入检索 Client 的精确 Python 命令。在 Evolution
-Workspace 中可追加以下子命令：
+渲染后的 Session Context 会列出全部授权 Agent Repository、优化汇总、Session 目录和 Runtime State
+目录，Evolver 直接读取这些不可变文件。可写的 `candidate/source/` 初始镜像 Active Source；
+`candidate/runtime-state/{skills,tools}/` 初始取最近完成 Epoch 的获胜分支中、产出最佳 Kernel 的
+Trajectory 在该 Epoch 最后一个 Attempt 结束后的终态 State；下一 Epoch 的 Active Branch 使用完全
+相同的 State 种子。缺失终态检查点时，依次回退到该 Trajectory 的 Epoch 起始 State、Revision Seed
+和空默认值。
+选择 `evolve_from_history` 时，
+Evolver 用所选历史 Agent 的 Source 替换 Candidate Source，并可从可见历史 Trajectory 中整理公共
+种子；Runtime 独立验证 Base 和 Source/State 的真实 Diff，并把两个组件封存为一个逻辑 Agent Bundle。
+
+持续维护 `scratch/evolution-report-draft.json`，然后调用：
 
 ```bash
-<injected-python> runtime-tools/evolver_tools.py history
-<injected-python> runtime-tools/evolver_tools.py branches --epoch 1
-<injected-python> runtime-tools/evolver_tools.py attempts --epoch 1 --branch challenger-0001
-<injected-python> runtime-tools/evolver_tools.py kernels
-<injected-python> runtime-tools/evolver_tools.py kernel-read --revision kernelrev_<id>
-<injected-python> runtime-tools/evolver_tools.py agents
-<injected-python> runtime-tools/evolver_tools.py agent-diff --base agentrev_<id> --candidate agentrev_<id>
-<injected-python> runtime-tools/evolver_tools.py trace-paths --epoch 1
-<injected-python> runtime-tools/evolver_tools.py candidate-reset --base agentrev_<historical-id>
+python input/evolver/src/runtime_tools.py evolution-report \
+  --request scratch/evolution-report-draft.json
 ```
 
-所有命令只使用冻结的本地快照并返回 JSON，不联系 Runtime 服务。`candidate-reset` 是唯一写操作：
-选择 `evolve_from_history` 时必须调用；它只接受已完成的 Lineage 历史，只原子替换
-`candidate/`，并记录其 Base。
+失败时根据返回的 `issues`、`request_schema` 与 `recovery` 修正 Draft 后重试。第一次成功调用会发布
+`scratch/evolution-report.json`；成功后不要再次调用。
 
 Runtime 不提供 Usage 配额。Schema v2 Usage Report 仍是必需协议，固定使用 `budget=null`、
 `budget_exhausted=false`。QoderCLI 记录 Credit，Claude、Codex 与 Pi 记录 Provider Token；

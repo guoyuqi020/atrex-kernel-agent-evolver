@@ -316,6 +316,12 @@ def token_usage_from_stream(stdout: str) -> int:
 def build_session_environment(runtime_id: str) -> dict[str, str]:
     """Build the explicit environment for one coding-agent session."""
     environment = os.environ.copy()
+    # Runtime-to-Evolver control inputs are consumed by the fixed Bundle wrapper and must not be
+    # inherited by the inner coding-agent process. The Agent receives only the normalized Session
+    # context and fixed workspace paths in its Prompt.
+    for key in tuple(environment):
+        if key.startswith("ATREX_"):
+            environment.pop(key)
     # Private Atrex-Bench evaluator inputs are campaign-scoped and must be reintroduced only by
     # the owning campaign, never inherited accidentally by an unrelated or legacy session.
     environment.pop("ATREX_PRIVATE_REFERENCE_DIR", None)
