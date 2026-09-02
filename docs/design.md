@@ -60,11 +60,12 @@ Epoch; each catalog entry supplies its Lineage version, Parent link, creator, `r
 Challenger ordinal when applicable. Every visible revision resolves to exactly one location keyed by
 that version: `input/agents/agent-vN/` holds its sealed Source and per-Trajectory Runtime State, and
 `input/evidence/agent-vN/` holds what Runtime derived about it. No directory name encodes an Epoch role.
-Every version has an optimization summary; only the two branches that competed in the most recent
-completed Epoch also have `sessions/` and `reports/`, both drawn from that same Epoch so the two are
+Every version has an optimization summary; only the branches that competed in the most recent
+completed Epoch also have `sessions/` and `reports/`, all drawn from that same Epoch so they are
 directly comparable. The Parent is the entry marked `parent`, which is that Epoch's winner. Each
-summary states the revision's `branch`, `outcome`, and the `selection_reason` that resolved the
-comparison, so the winner is identified by recorded fact rather than inferred from latency.
+summary states the revision's `branch` and `outcome`. Its `selection_reason` records the final
+pairwise selection step, not every comparison in a multi-Challenger tournament, so it must not be
+treated as the individual reason every losing revision lost.
 Conversations and Attempt reports are grouped by Trajectory; Bootstrap and older Epoch conversations
 remain private Runtime history, and current-Epoch Challengers have neither because they have
 run no Attempt. Runtime also projects each available prior Agent-creation `EvolutionOutput` into ordered

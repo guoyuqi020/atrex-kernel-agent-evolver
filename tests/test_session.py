@@ -444,8 +444,7 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert '"reports_path": "input/evidence/agent-v0/reports"' in prompt
     assert '"runtime_state_path": "input/agents/agent-v0/runtime-state"' in prompt
     assert '"evolution_reports": "input/evolution-reports"' in prompt
-    assert "Compare each prior report's" in prompt
-    assert "identify its actual Source change" in prompt
+    assert "`changed_paths`: exact sorted Source-relative regular-file diff" in prompt
     assert "intentionally\n   omit Revision IDs" not in prompt
     assert '"optimizer_digest"' not in prompt.split("# Session context", 1)[1]
     assert '"created_by"' not in prompt.split("# Session context", 1)[1]
@@ -478,12 +477,11 @@ def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Pat
     assert "# Session audit" in prompt
     assert "read every available `conversation.jsonl` and" in normalized
     assert "`attempt-NNNNNNNN.report.json` under `input/evidence/`" in normalized
-    assert "the two branches that competed in the most recent completed Epoch" in normalized
-    assert "why the losing branch lost" in normalized
-    assert "`latest_epoch.selection_reason` states the rule that decided it" in normalized
-    assert "not from latency alone" in normalized
-    assert "do not replace them" in normalized
-    assert "Find material problems even when the Session eventually succeeded" in normalized
+    assert "for every Branch in the most recent completed Epoch" in normalized
+    assert "why each losing Branch lost" in normalized
+    assert "`latest_epoch.selection_reason` semantics" in normalized
+    assert "do not infer selection from raw latency or paths" in normalized
+    assert "Find material problems even when a Session eventually succeeded" in normalized
     assert "A falsified Kernel hypothesis can be productive" in normalized
     assert "transient service failure is not automatically an Agent defect" in normalized
     for opportunity in (
@@ -496,6 +494,8 @@ def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Pat
         assert opportunity in normalized
     assert "specific observed behavior" in normalized
     assert "causal Agent-level mechanism" in normalized
+    assert "visible only to prevent duplicate proposals" in normalized
+    assert "do not copy from it" in normalized
 
 
 def test_session_records_large_usage_without_a_token_limit(tmp_path: Path) -> None:

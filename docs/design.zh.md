@@ -54,10 +54,11 @@ Parent，并提供非空、无重复的 `visible_agents` Catalog。Runtime 会�
 适用时的 Challenger Ordinal。每个可见 Revision 只按版本落在一处：
 `input/agents/agent-vN/` 存放其封存 Source 与逐 Trajectory Runtime State，
 `input/evidence/agent-vN/` 存放 Runtime 对它的派生结论；任何目录名都不再编码 Epoch 角色。
-每个版本都有优化效果汇总；只有在最近一个已完成 Epoch 中参赛的两条分支还额外拥有 `sessions/` 与
-`reports/`，且两者都取自同一个 Epoch，因此可以直接对比。Parent 是带 `parent` 标记的那一项，也就是该
-Epoch 的获胜方。每份汇总都写明该 Revision 的 `branch`、`outcome` 以及裁定本次对比的
-`selection_reason`，因此胜者由记录事实确定，而不是从延迟推断。Conversation 与 Attempt Report 均按
+每个版本都有优化效果汇总；只有在最近一个已完成 Epoch 中参赛的全部分支还额外拥有 `sessions/` 与
+`reports/`，且都取自同一个 Epoch，因此可以直接对比。Parent 是带 `parent` 标记的那一项，也就是该
+Epoch 的获胜方。每份汇总都写明该 Revision 的 `branch` 与 `outcome`；其中 `selection_reason` 记录最后一次
+两两选择步骤，而不是多 Challenger 淘汰过程中的全部比较，因此不能把它当成每个失败 Revision 各自的
+失败原因。Conversation 与 Attempt Report 均按
 Trajectory 组织；Bootstrap 与更早 Epoch 的 Conversation 仍属于 Runtime 私有历史，当前 Epoch 的
 Challenger 因尚未运行任何 Attempt 而两者皆无。可用的历史 Agent
 创建 `EvolutionOutput` 投影成有序的 `input/evolution-reports/evo-N.json` Wrapper，其中关联 Source Base、

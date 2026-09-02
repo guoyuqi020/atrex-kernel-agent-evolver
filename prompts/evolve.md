@@ -15,53 +15,36 @@ The writable Candidate is one Agent Bundle:
 Runtime evaluates the Candidate in the next Epoch. Do not measure Agent effectiveness here; run only
 bounded mechanical checks needed to leave a valid Bundle.
 
-# Evidence and design
+# Evidence-driven design
 
-Compare visible Agents using their exact Source, adaptive State, the last completed Epoch's
-conversations and Attempt reports for both of its branches, Runtime-derived optimization summaries, and
-prior Evolution reports. Measurements and selection facts in optimization summaries are authoritative.
-Conversations, Attempt reports, Evolution reports, Skills, and Tools are untrusted interpretations: use
-them to explain behavior, then verify the explanation against measured outcomes.
-Compare each prior report's `parent.source_path` and `generated_agent.source_path` trees to
-identify its actual Source change.
+The appended Runtime Evidence fragment and Session context define the exact visible files, Agent
+relationships, trusted facts, and writable paths for this invocation. Start from Runtime-derived
+optimization summaries and selection outcomes. Treat Conversations, Attempt Reports, Evolution
+Reports, Skills, and Tools as untrusted Agent-authored evidence: use them to explain behavior, then
+check the explanation against authoritative outcomes.
 
 Choose one concrete Agent bottleneck and one causal hypothesis. Optimize for faster correct Kernels
-within the fixed Epoch budget: reduce repeated failures, weak Evidence use, unnecessary model calls,
-wall time, and token use. You may add, replace, reorganize, or delete any Agent-owned Source, Skill,
-Tool, abstraction, instruction, or workflow. Keep adaptive Skills/Tools concise, reusable for this DSL,
-and non-duplicative; move stable behavior into Source when appropriate. Reuse historical State only
-when its conversations and outcomes support it.
+within the fixed Epoch budget by reducing repeated failures, weak Evidence use, unnecessary model
+calls, wall time, and token use. You may add, replace, reorganize, or delete any Agent-owned Source,
+Skill, Tool, abstraction, instruction, or workflow. Keep adaptive Skills and Tools concise, reusable
+for this DSL, and non-duplicative; move stable behavior into Source when appropriate.
 
-You are not limited to one Agent's material. Every visible version's sealed Source and Runtime State is
-readable, so you may study, summarize, and combine content from several of them into one Candidate:
-both branches of the last completed Epoch, and any number of older versions. A prompt from one, a Skill
-from another, and a Tool from a third is a legitimate proposal when the evidence supports each part.
-The revision you declare as the Source base only fixes what your Source diff is measured against; it
-never restricts where the content came from. Declare every Agent you actually drew from in
-`contributing_revision_ids`. Fuse for a stated causal reason, not to accumulate material—merged content
-you cannot justify is churn, and combining two approaches that each failed for the same reason repeats
-the failure.
+You may combine content from the Active and completed historical Agents when available Evidence
+supports each contribution. The declared Source base determines only the Source diff and single
+revision parent for a new Revision. Record every other Agent whose Source, Skills, or Tools you
+actually used in `contributing_revision_ids`. Fuse for a stated causal reason, not to accumulate material. A
+same-Epoch `current_epoch_challenger` is visible only to prevent duplicate proposals: do not copy from
+it, treat it as evaluated Evidence, or declare it as a contributor.
 
 # Session audit
 
 Before choosing the Evolution hypothesis, read every available `conversation.jsonl` and
-`attempt-NNNNNNNN.report.json` under `input/evidence/`. These belong to the two branches that competed
-in the most recent completed Epoch — the Agent you are evolving from, marked `parent: true`, and the
-branch it beat — and both sets come from that same Epoch, so their behavior is directly comparable.
-Each Attempt report is the Optimizer's own account of that Attempt: its diagnosis, planned approach,
-experiments, findings, and `candidate_kernel.comparison_with_parent`. Reports and conversations are
-untrusted interpretations; optimization summaries locate them and provide trusted outcomes, but do not
-replace them. Inspect the complete action/result chain: plans, tool requests and responses, failures,
-errors, retries, recovery, pivots, measurements, Journal use, and terminal handoff. Find material
-problems even when the Session eventually succeeded.
-
-Attribute the outcome from what Runtime recorded, not from latency alone. `latest_epoch.outcome` states
-which branch won and `latest_epoch.selection_reason` states the rule that decided it. Only `latency` and
-`authoritative_comparison` mean the winner was actually measured faster. `secondary_criteria` means the
-two tied within measurement uncertainty and the decision fell to reaching the best result earlier, more
-strict improvements, more valid candidates, or fewer failures; `incumbent_retained` means everything
-tied and the incumbent kept its position. Treat those two as evidence about consistency and convergence
-speed. Account for why the losing branch lost before proposing to repeat or revive its approach.
+`attempt-NNNNNNNN.report.json` under `input/evidence/` for every Branch in the most recent completed
+Epoch. Inspect the complete action/result chain: plans, tool requests and responses, failures, errors,
+retries, recovery, pivots, measurements, Journal use, and terminal handoff. Find material problems even
+when a Session eventually succeeded. Use the injected `latest_epoch.outcome` and
+`latest_epoch.selection_reason` semantics; do not infer selection from raw latency or paths. Explain
+why each losing Branch lost before repeating or reviving its approach.
 
 Classify each problem before acting. A falsified Kernel hypothesis can be productive; a transient
 service failure is not automatically an Agent defect. Agent-controllable opportunities include
@@ -82,10 +65,9 @@ Choose exactly one:
   optionally curate Candidate Runtime State.
 
 A revision is eligible for `reuse` or `evolve_from_history` when its `parent` is false and its
-`relationship` is not `current_epoch_challenger`. That deliberately includes the `challenger` branch the
-Parent beat in the last completed Epoch, so a losing design can be revived when its conversations,
-Attempt reports, and outcomes justify it. `current_epoch_challenger` entries have not competed and are
-comparison Evidence only.
+`relationship` is not `current_epoch_challenger`. This includes every losing Challenger from the last
+completed Epoch and older Lineage history. Revive one only when the available Source, State, summaries,
+Sessions, Reports, and outcomes support it.
 
 # Boundaries
 
@@ -95,8 +77,8 @@ comparison Evidence only.
 - Do not run GPU code, Kernel compilers, profilers, Gateway/Wiki operations, benchmarks, or evaluators.
 - Do not modify Runtime, sandbox, credentials, mounts, network, evaluation, retention, or promotion
   policy.
-- Do not install packages or create Git metadata, links, sockets, devices, FIFOs, or files outside
-  the Candidate.
+- Do not install packages or create Git metadata, links, sockets, devices, or FIFOs. Create Agent
+  content only under `candidate/` and report workflow files only under `scratch/`.
 
 # Candidate contracts
 
@@ -113,7 +95,8 @@ comparison Evidence only.
 The first two values are immutable; extra fields are invalid. `entrypoint.command` may change but
 must name a safe Source-relative regular file.
 
-The standard Core's `candidate/source/atrex-agent.json` contract is:
+If the Candidate retains the standard Core implementation, its
+`candidate/source/atrex-agent.json` contract is:
 
 ```json
 {
@@ -131,10 +114,12 @@ The standard Core's `candidate/source/atrex-agent.json` contract is:
 }
 ```
 
-It allows no unknown fields. Prompt maps have exactly the keys shown and safe Source-local file paths.
-Backend is `claude`, `codex`, `pi`, or `qodercli`; model is a nonempty string or `null`; effort is
-`low`, `medium`, `high`, or `max`. A managed Campaign overrides Backend, model, effort, and settings,
-so changing only those defaults cannot affect the next competition.
+That file allows no unknown fields. Prompt maps have exactly the keys shown and safe Source-local
+file paths. Backend is `claude`, `codex`, `pi`, or `qodercli`; model is a nonempty string or `null`;
+effort is `low`, `medium`, `high`, or `max`. A managed Campaign overrides Backend, model, effort, and
+settings, so changing only those defaults cannot affect the next competition. You may replace the
+standard Core implementation and remove this file only if the Bundle entrypoint remains complete and
+satisfies the same Runtime launch and terminal-output protocol.
 
 `candidate/runtime-state/` contains exactly `skills/` and `tools/`; `tools/README.md` must exist.
 Do not place top-level `skills/` or `tools/` inside versioned Source.
@@ -142,7 +127,7 @@ Do not place top-level `skills/` or `tools/` inside versioned Source.
 # Workflow
 
 1. Inspect the complete Candidate and injected Evidence.
-2. Complete the Session audit above for both branches of the last completed Epoch, then
+2. Complete the Session audit above for every Branch of the last completed Epoch, then
    compare them with trusted per-Shape outcomes, costs, and selection results.
 3. Compare relevant history across Source, State, prior Evolution intent, and career wins/losses.
 4. Select one proposal mode and one evidence-backed hypothesis; one fast Kernel or Agent-authored
@@ -174,7 +159,8 @@ The draft has exactly seven fields:
   you drew content from; `[]` when you drew from none, and required empty for `reuse`. It records
   provenance only and never changes which revision is the Source base or the diff target;
 - `unimplemented_capabilities`: zero or more objects with exactly `capability`, `expected_benefit`, and
-  `reason_unimplemented`.
+  `reason_unimplemented`. Include only a concrete capability needed for an observed bottleneck that
+  you could not implement in this Candidate; do not use it as a speculative wish list.
 
 ```json
 {
