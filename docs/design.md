@@ -13,17 +13,16 @@ Runtime materializes this workspace:
 ```text
 run-<uuid>/
 ├── input/
-│   ├── agents/                # current competition pool only
-│   │   ├── active/{source,runtime-state}/
-│   │   └── challenger-<ordinal>/{source,runtime-state}/
+│   ├── agents/                # every visible Agent version, one location each
+│   │   └── agent-v<N>/
+│   │       ├── source/        # exact versioned Agent repository
+│   │       └── runtime-state/ # per-Trajectory skills/tools
 │   ├── evidence/              # read-only authorized execution Evidence
-│   │   ├── active/{optimization-summary.json,sessions/}
-│   │   └── challenger-<ordinal>/{optimization-summary.json,sessions/}
-│   └── historical/            # completed, non-current Agent versions
-│       └── agent-v<N>/
-│           ├── source/        # exact versioned Agent repository
-│           ├── optimization-summary.json
-│           └── runtime-state/ # per-Trajectory skills/tools
+│   │   └── agent-v<N>/
+│   │       ├── optimization-summary.json
+│   │       ├── sessions/      # last completed Epoch's branches only
+│   │       └── reports/       # last completed Epoch's branches only
+│   └── evolution-reports/     # prior Agent-creation reports
 ├── candidate/                 # writable Agent Candidate
 │   ├── source/                # complete versioned Bundle
 │   └── runtime-state/         # one common {skills,tools} seed
@@ -53,20 +52,26 @@ Prompt while retaining compatibility with Runtime's current process transport.
 
 ## 3. Input and output
 
-The entrypoint accepts only Evolution manifest schema 9 with the exact fixed path map. The manifest
+The entrypoint accepts only Evolution manifest schema 11 with the exact fixed path map. The manifest
 identifies exactly one Parent and a nonempty, duplicate-free `visible_agents` catalog. Runtime
 includes the retained Lineage Agent history plus Challengers already created earlier in the current
-Epoch; each catalog entry supplies its Parent link, creator, relationship, and current-Epoch
-Challenger ordinal when applicable. Current participants resolve under `input/agents/`; completed,
-non-current versions resolve under `input/historical/agent-vN/`. The unified Evidence view exposes
-each current participant's Runtime-derived optimization summary and one authoritative
-`conversation.jsonl` per Attempt from its latest completed Epoch. Conversations are grouped by
-Trajectory; Bootstrap and older Epoch conversations remain private Runtime history. Runtime also
-projects each available prior Agent-creation `EvolutionOutput` into ordered
+Epoch; each catalog entry supplies its Lineage version, Parent link, creator, `relationship`
+(`active`, `challenger`, `current_epoch_challenger`, or `lineage_history`), and
+Challenger ordinal when applicable. Every visible revision resolves to exactly one location keyed by
+that version: `input/agents/agent-vN/` holds its sealed Source and per-Trajectory Runtime State, and
+`input/evidence/agent-vN/` holds what Runtime derived about it. No directory name encodes an Epoch role.
+Every version has an optimization summary; only the two branches that competed in the most recent
+completed Epoch also have `sessions/` and `reports/`, both drawn from that same Epoch so the two are
+directly comparable. The Parent is the entry marked `parent`, which is that Epoch's winner. Each
+summary states the revision's `branch`, `outcome`, and the `selection_reason` that resolved the
+comparison, so the winner is identified by recorded fact rather than inferred from latency.
+Conversations and Attempt reports are grouped by Trajectory; Bootstrap and older Epoch conversations
+remain private Runtime history, and current-Epoch Challengers have neither because they have
+run no Attempt. Runtime also projects each available prior Agent-creation `EvolutionOutput` into ordered
 `input/evolution-reports/evo-N.json` wrappers that link the Source Base and produced Agent to their
 visible Source and Runtime State paths. Full Evolution traces remain private. Per-Trajectory
-adaptive `skills/` and `tools/` live under the corresponding `runtime-state/` beside the current
-source; historical directories co-locate source, accumulated effect, and runtime state. They are
+adaptive `skills/` and `tools/` live under the corresponding `runtime-state/` beside that version's
+source, co-locating source, accumulated effect, and runtime state. They are
 non-versioned Lineage state and are the only adaptive Skill/Tool storage. Top-level `skills/` and
 `tools/` are reserved and invalid in versioned source. Evolver may curate the writable
 `candidate/runtime-state/` directly or improve the source mechanism that governs its future use.
@@ -81,13 +86,12 @@ an Agent-facing `epochs/` tree or duplicate that detailed history inside the Evo
 each environment path to the manifest and rejects
 links and path escapes. A usage-report destination is mandatory, but no token budget is accepted.
 
-`Parent` is a role, not another repository or directory. It is exactly the visible Agent whose
-relationship is `active`, stored once under `input/agents/active/`. Runtime copies its Source and
-the latest completed Epoch winner's best-Kernel Trajectory terminal State after that Epoch's last
-Attempt into Candidate. The next Epoch's Active Branch uses the same State seed. Missing terminal
+`Parent` is a role, not another repository or directory. It is exactly the visible Agent marked
+`parent`, stored once under `input/agents/agent-v<N>/` like every other version. Runtime copies its
+Source and the latest completed Epoch winner's best-Kernel Trajectory terminal State after that Epoch's
+last Attempt into Candidate. The next Epoch's Active Branch uses the same State seed. Missing terminal
 State falls back to that Trajectory's Epoch-start State, the revision seed, and then the empty default.
-Historical versions
-are stored under `input/historical/agent-vN/`. For `evolve_from_history`, Evolver replaces Candidate
+For `evolve_from_history`, Evolver replaces Candidate
 Source with the selected historical Source and may synthesize the common seed from visible historical
 Trajectories. The terminal output names only its `kernel_agent_revision_id`; Runtime uses that
 Revision's Source as the proposal reference and checks its
@@ -99,13 +103,18 @@ No Candidate-control tool or side record is trusted or required.
 The Evidence structure Prompt Fragment is authored from a Runtime source template and passed to the
 outer Bundle process in memory before being appended to the final Prompt.
 
-The Coding Agent writes uniform `EvolutionOutput`. Every mode uses `kernel_agent_revision_id` and
-`changed_paths`; the latter reports only sorted Source-root-relative paths. Reuse requires an empty
+The Coding Agent writes uniform `EvolutionOutput`. Every mode uses `kernel_agent_revision_id`,
+`changed_paths`, and `contributing_revision_ids`; the second reports only sorted Source-root-relative
+paths. Reuse requires an empty
 array, and a State-only new revision may also report an empty array. It
 may derive a new revision from Active,
 reuse one visible historical revision unchanged, or derive a new revision from one visible
 historical revision. New-revision proposals include an exact sorted changed-path declaration
-relative to the selected Source base. Runtime computes State changes privately. Every mode
+relative to the selected Source base. Runtime computes State changes privately. A Candidate may also
+combine content from several visible Agents; `contributing_revision_ids` names every revision other
+than the Source base whose Source, Skills, or Tools it drew from, restricted to completed Lineage
+history or the Active. That is provenance, not parentage: the Source base and the diff target remain
+the single declared revision. Every mode
 may include bounded structured
 `unimplemented_capabilities`, recording a capability, its expected Kernel-optimization benefit, and
 the concrete reason it could not be implemented. Runtime preserves these untrusted advisory entries

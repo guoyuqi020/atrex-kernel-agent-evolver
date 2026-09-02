@@ -33,6 +33,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
                 "hypothesis": "Tighten the search policy.",
                 "expected_effect": "Fewer repeated unsuccessful changes.",
                 "changed_paths": ["src/workflow.py", "prompts/episode.md"],
+                "contributing_revision_ids": [],
                 "unimplemented_capabilities": [],
             }
         )
@@ -50,6 +51,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Tighten the search policy.",
             "expected_effect": "Fewer repeated unsuccessful changes.",
             "changed_paths": ["prompts/episode.md", "src/workflow.py"],
+            "contributing_revision_ids": [],
             "unimplemented_capabilities": [
                 {
                     "capability": "Automatic profiler-guided tool synthesis.",
@@ -64,6 +66,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Curate only the reusable Runtime State seed.",
             "expected_effect": "Start the next Epoch with a better reusable procedure.",
             "changed_paths": [],
+            "contributing_revision_ids": [],
             "unimplemented_capabilities": [],
         },
         {
@@ -72,6 +75,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Retry a previously strong design.",
             "expected_effect": "Recover its prior search behavior.",
             "changed_paths": [],
+            "contributing_revision_ids": [],
             "unimplemented_capabilities": [],
         },
         {
@@ -80,6 +84,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Repair the historical design's one weak step.",
             "expected_effect": "Retain its strengths with fewer repeated trials.",
             "changed_paths": ["prompts/episode.md"],
+            "contributing_revision_ids": [],
             "unimplemented_capabilities": [],
         },
     ],
@@ -92,6 +97,70 @@ def test_output_accepts_all_strict_modes(
     assert _validate(path) == value
 
 
+def _fusion_draft(contributing: list[str]) -> dict[str, object]:
+    return {
+        "proposal_type": "evolved",
+        "kernel_agent_revision_id": ACTIVE,
+        "hypothesis": "Combine the historical recovery step with the current search policy.",
+        "expected_effect": "Fewer repeated dead ends without losing the current convergence.",
+        "changed_paths": ["prompts/episode.md"],
+        "contributing_revision_ids": contributing,
+        "unimplemented_capabilities": [],
+    }
+
+
+def test_output_accepts_a_credited_historical_contributor(tmp_path: Path) -> None:
+    path = tmp_path / "output.json"
+    value = _fusion_draft([HISTORICAL])
+    path.write_text(json.dumps(value))
+
+    assert _validate(path) == value
+
+
+def test_output_rejects_a_contributor_outside_frozen_visibility(tmp_path: Path) -> None:
+    path = tmp_path / "output.json"
+    path.write_text(json.dumps(_fusion_draft(["agentrev_" + "2" * 32])))
+
+    with pytest.raises(ValueError, match=r"contributing_revision_ids\[0\] is outside the frozen"):
+        _validate(path)
+
+
+def test_output_rejects_a_contributor_repeating_the_source_base(tmp_path: Path) -> None:
+    path = tmp_path / "output.json"
+    path.write_text(json.dumps(_fusion_draft([ACTIVE])))
+
+    with pytest.raises(ValueError, match="repeats the selected Source base"):
+        _validate(path)
+
+
+def test_output_requires_sorted_contributors(tmp_path: Path) -> None:
+    other = "agentrev_" + "3" * 32
+    path = tmp_path / "output.json"
+    path.write_text(json.dumps(_fusion_draft([other, HISTORICAL])))
+
+    with pytest.raises(ValueError, match="contributing_revision_ids must be sorted"):
+        validate_evolution_output(
+            path,
+            active_revision_id=ACTIVE,
+            visible_revision_ids=VISIBLE | {other},
+            historical_revision_ids=frozenset((HISTORICAL, other)),
+            max_bytes=4096,
+        )
+
+
+def test_output_rejects_contributors_under_reuse(tmp_path: Path) -> None:
+    value = _fusion_draft([])
+    value["proposal_type"] = "reuse"
+    value["kernel_agent_revision_id"] = HISTORICAL
+    value["changed_paths"] = []
+    value["contributing_revision_ids"] = [ACTIVE]
+    path = tmp_path / "output.json"
+    path.write_text(json.dumps(value))
+
+    with pytest.raises(ValueError, match="reuse requires contributing_revision_ids to be empty"):
+        _validate(path)
+
+
 def test_output_rejects_revision_outside_frozen_visibility(tmp_path: Path) -> None:
     path = tmp_path / "output.json"
     path.write_text(
@@ -102,6 +171,7 @@ def test_output_rejects_revision_outside_frozen_visibility(tmp_path: Path) -> No
                 "hypothesis": "Unknown Agent.",
                 "expected_effect": "None.",
                 "changed_paths": [],
+                "contributing_revision_ids": [],
                 "unimplemented_capabilities": [],
             }
         )
@@ -120,6 +190,7 @@ def test_output_rejects_malformed_unimplemented_capability(tmp_path: Path) -> No
                 "hypothesis": "Retry a previously strong design.",
                 "expected_effect": "Recover its prior search behavior.",
                 "changed_paths": [],
+                "contributing_revision_ids": [],
                 "unimplemented_capabilities": [
                     {
                         "capability": "Profiler-guided search.",
@@ -144,6 +215,7 @@ def test_contract_violations_name_the_offending_field(tmp_path: Path) -> None:
                 "hypothesis": "Bundle reusable skills into the sealed repository.",
                 "expected_effect": "Spend less budget rebuilding apparatus.",
                 "changed_paths": ["prompts/episode.md"],
+                "contributing_revision_ids": [],
                 "unimplemented_capabilities": [
                     "Cross-attempt persistence: no handoff mechanism exists by design.",
                 ],

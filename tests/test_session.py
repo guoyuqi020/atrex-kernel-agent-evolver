@@ -7,6 +7,7 @@ import threading
 import time
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -16,17 +17,18 @@ from context import LAUNCH_SENTINEL, EvolutionContext
 from session import execute, render_prompt
 
 REVISION = "agentrev_0123456789abcdef0123456789abcdef"
+RIVAL = "agentrev_fedcba9876543210fedcba9876543210"
 DIGEST = "sha256:" + "a" * 64
 EVIDENCE_PROMPT = "# Evidence input\n\nInjected by the trusted controller.\n"
 
 
-def _context(tmp_path: Path) -> EvolutionContext:
+def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionContext:
     workspace = tmp_path / "run"
     for relative in (
-        "input/agents/active/source",
-        "input/agents/active/runtime-state/trajectories",
-        "input/historical",
-        "input/evidence/active/sessions",
+        "input/agents/agent-v0/source",
+        "input/agents/agent-v0/runtime-state/trajectories",
+        "input/evidence/agent-v0/sessions",
+        "input/evidence/agent-v0/reports",
         "input/evolution-reports",
         "candidate/source",
         "candidate/runtime-state/skills",
@@ -35,41 +37,68 @@ def _context(tmp_path: Path) -> EvolutionContext:
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
     (workspace / "candidate/runtime-state/tools/README.md").write_text("# Tools\n")
-    (workspace / "input/evidence/active/optimization-summary.json").write_text("{}")
-    (workspace / "input/agents/active/source/atrex-bundle.json").write_text("{}")
+    (workspace / "input/evidence/agent-v0/optimization-summary.json").write_text("{}")
+    (workspace / "input/agents/agent-v0/source/atrex-bundle.json").write_text("{}")
     (workspace / "candidate/source/atrex-bundle.json").write_text("{}")
+    visible_agents: list[dict[str, Any]] = [
+        {
+            "revision_id": REVISION,
+            "version": "agent-v0",
+            "optimizer_digest": DIGEST,
+            "path": "input/agents/agent-v0/source",
+            "optimization_summary_path": "input/evidence/agent-v0/optimization-summary.json",
+            "sessions_path": "input/evidence/agent-v0/sessions",
+            "reports_path": "input/evidence/agent-v0/reports",
+            "runtime_state_path": "input/agents/agent-v0/runtime-state",
+            "parent": True,
+            "relationship": "active",
+            "challenger_ordinal": None,
+            "parent_revision_id": None,
+            "created_by": "bootstrap",
+        }
+    ]
     manifest = {
-        "schema_version": 10,
+        "schema_version": 11,
         "parent_revision_id": REVISION,
         "evidence_checkpoint": DIGEST,
         "idempotency_key": "epoch:test:challenger",
         "dsl": "triton",
         "optimizer_digest": DIGEST,
-        "visible_agents": [
-            {
-                "revision_id": REVISION,
-                "version": None,
-                "optimizer_digest": DIGEST,
-                "path": "input/agents/active/source",
-                "optimization_summary_path": "input/evidence/active/optimization-summary.json",
-                "sessions_path": "input/evidence/active/sessions",
-                "runtime_state_path": "input/agents/active/runtime-state",
-                "parent": True,
-                "relationship": "active",
-                "challenger_ordinal": None,
-                "parent_revision_id": None,
-                "created_by": "bootstrap",
-            }
-        ],
+        "visible_agents": visible_agents,
         "paths": {
             "agents": "input/agents",
-            "historical": "input/historical",
             "evidence": "input/evidence",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-report.json",
         },
     }
+    if with_challenger:
+        for relative in (
+            "input/agents/agent-v1/source",
+            "input/agents/agent-v1/runtime-state/trajectories",
+            "input/evidence/agent-v1/sessions",
+            "input/evidence/agent-v1/reports",
+        ):
+            (workspace / relative).mkdir(parents=True)
+        (workspace / "input/evidence/agent-v1/optimization-summary.json").write_text("{}")
+        visible_agents.append(
+            {
+                "revision_id": RIVAL,
+                "version": "agent-v1",
+                "optimizer_digest": DIGEST,
+                "path": "input/agents/agent-v1/source",
+                "optimization_summary_path": "input/evidence/agent-v1/optimization-summary.json",
+                "sessions_path": "input/evidence/agent-v1/sessions",
+                "reports_path": "input/evidence/agent-v1/reports",
+                "runtime_state_path": "input/agents/agent-v1/runtime-state",
+                "parent": False,
+                "relationship": "challenger",
+                "challenger_ordinal": 1,
+                "parent_revision_id": REVISION,
+                "created_by": "evolver",
+            }
+        )
     return EvolutionContext.load(
         {
             "ATREX_EVOLUTION_INPUT_JSON": json.dumps(manifest),
@@ -102,6 +131,7 @@ Path("scratch/evolution-report.json").write_text(json.dumps({
     "hypothesis": "Use a narrower evidence-driven search policy.",
     "expected_effect": "Reduce repeated failed optimization directions.",
     "changed_paths": ["prompts/evolve-result.md"],
+    "contributing_revision_ids": [],
     "unimplemented_capabilities": [],
 }))
 print(json.dumps({
@@ -161,6 +191,7 @@ Path("scratch/evolution-report.json").write_text(json.dumps({
     "hypothesis": "Continue until the evolution direction is complete.",
     "expected_effect": "Avoid terminating evolution due to provider token count.",
     "changed_paths": ["prompts/evolve-result.md"],
+    "contributing_revision_ids": [],
     "unimplemented_capabilities": [],
 }))
 
@@ -207,6 +238,7 @@ Path("scratch/evolution-report.json").write_text(json.dumps({{
     "hypothesis": "Stream the Evolver trace while it runs.",
     "expected_effect": "Make active evolution sessions inspectable.",
     "changed_paths": ["prompts/evolve-result.md"],
+    "contributing_revision_ids": [],
     "unimplemented_capabilities": [],
 }}))
 print(json.dumps({{"type": "result", "usage": {{
@@ -369,6 +401,21 @@ def test_session_trace_retains_partial_output_after_runner_failure(
     assert '"state": "interrupted"' in conversation
 
 
+def test_rendered_prompt_identifies_each_challenger_by_ordinal(tmp_path: Path) -> None:
+    context = _context(tmp_path, with_challenger=True)
+    config = _config(tmp_path, _fake_claude(tmp_path))
+
+    prompt = render_prompt(context, config)
+    entries = json.loads(prompt.split("# Session context\n\n```json\n", 1)[1].split("\n```", 1)[0])
+    by_version = {item["version"]: item for item in entries["visible_agent_repositories"]}
+
+    assert by_version["agent-v0"]["relationship"] == "active"
+    assert by_version["agent-v0"]["challenger_ordinal"] is None
+    assert by_version["agent-v1"]["relationship"] == "challenger"
+    assert by_version["agent-v1"]["challenger_ordinal"] == 1
+    assert '"challenger_ordinal": 1' in prompt
+
+
 def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     context = _context(tmp_path)
     repository_prompt = Path(__file__).resolve().parents[1] / "prompts/evolve.md"
@@ -387,12 +434,15 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert '"dsl": "triton"' in prompt
     assert "gateway" not in prompt.lower().split("# session context", 1)[1]
     assert "wiki" not in prompt.lower().split("# session context", 1)[1]
-    assert '"source_path": "input/agents/active/source"' in prompt
+    assert '"source_path": "input/agents/agent-v0/source"' in prompt
     assert '"relationship": "active"' in prompt
+    assert '"challenger_ordinal": null' in prompt
+    assert '"parent": true' in prompt
     assert '"source_parent_revision_id": null' in prompt
-    assert '"optimization_summary_path": "input/evidence/active/' in prompt
-    assert '"sessions_path": "input/evidence/active/sessions"' in prompt
-    assert '"runtime_state_path": "input/agents/active/runtime-state"' in prompt
+    assert '"optimization_summary_path": "input/evidence/agent-v0/' in prompt
+    assert '"sessions_path": "input/evidence/agent-v0/sessions"' in prompt
+    assert '"reports_path": "input/evidence/agent-v0/reports"' in prompt
+    assert '"runtime_state_path": "input/agents/agent-v0/runtime-state"' in prompt
     assert '"evolution_reports": "input/evolution-reports"' in prompt
     assert "Compare each prior report's" in prompt
     assert "identify its actual Source change" in prompt
@@ -405,6 +455,8 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "runtime-tools" not in prompt
     assert "candidate-reset" not in prompt
     assert "Do not place top-level `skills/` or `tools/`" in prompt
+    assert "`relationship` is not `current_epoch_challenger`" in prompt
+    assert "when its `parent` is false" in prompt
     assert "candidate/runtime-state/" in prompt
     assert "reusable `skills/` and `tools/` seed" in prompt
     assert "python3 input/evolver/src/runtime_tools.py evolution-report" in prompt
@@ -424,8 +476,13 @@ def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Pat
     normalized = " ".join(prompt.split())
 
     assert "# Session audit" in prompt
-    assert "read every visible latest-Epoch `conversation.jsonl`" in normalized
-    assert "do not replace the conversations" in normalized
+    assert "read every available `conversation.jsonl` and" in normalized
+    assert "`attempt-NNNNNNNN.report.json` under `input/evidence/`" in normalized
+    assert "the two branches that competed in the most recent completed Epoch" in normalized
+    assert "why the losing branch lost" in normalized
+    assert "`latest_epoch.selection_reason` states the rule that decided it" in normalized
+    assert "not from latency alone" in normalized
+    assert "do not replace them" in normalized
     assert "Find material problems even when the Session eventually succeeded" in normalized
     assert "A falsified Kernel hypothesis can be productive" in normalized
     assert "transient service failure is not automatically an Agent defect" in normalized

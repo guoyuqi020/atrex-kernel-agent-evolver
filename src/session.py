@@ -79,10 +79,13 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
                 "revision_id": item.revision_id,
                 "version": item.version,
                 "relationship": item.relationship,
+                "challenger_ordinal": item.challenger_ordinal,
+                "parent": item.parent,
                 "source_parent_revision_id": item.parent_revision_id,
                 "source_path": item.path,
                 "optimization_summary_path": item.optimization_summary_path,
                 "sessions_path": item.sessions_path,
+                "reports_path": item.reports_path,
                 "runtime_state_path": item.runtime_state_path,
             }
             for item in context.visible_agents
@@ -132,6 +135,7 @@ def _prepare_evolution_report_tool(
             {
                 "revision_id": item.revision_id,
                 "relationship": item.relationship,
+                "parent": item.parent,
                 "source_path": item.path,
             }
             for item in context.visible_agents
@@ -523,7 +527,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             historical_revision_ids=frozenset(
                 item.revision_id
                 for item in context.visible_agents
-                if item.relationship == "lineage_history"
+                if not item.parent and item.relationship != "current_epoch_challenger"
             ),
             max_bytes=config.max_output_manifest_bytes,
         )

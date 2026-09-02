@@ -16,6 +16,19 @@ class EvolutionOutputContractError(ValueError):
     """
 
 
+EVOLUTION_OUTPUT_FIELDS = frozenset(
+    {
+        "proposal_type",
+        "kernel_agent_revision_id",
+        "hypothesis",
+        "expected_effect",
+        "changed_paths",
+        "contributing_revision_ids",
+        "unimplemented_capabilities",
+    }
+)
+
+
 def _text(value: object, label: str, *, max_length: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > max_length:
         raise ValueError(f"{label} must be non-blank and at most {max_length} characters")
@@ -44,6 +57,40 @@ def _changed_paths(value: object) -> list[str]:
         raise ValueError("changed_paths cannot contain duplicates")
     if normalized != sorted(normalized):
         raise ValueError("changed_paths must be sorted")
+    return normalized
+
+
+def _contributing_revision_ids(
+    value: object,
+    *,
+    source_reference: str,
+    active_revision_id: str,
+    visible_revision_ids: frozenset[str],
+    historical_revision_ids: frozenset[str],
+) -> list[str]:
+    if not isinstance(value, list) or len(value) > 64:
+        raise ValueError("contributing_revision_ids must be an array with at most 64 entries")
+    creditable = historical_revision_ids | {active_revision_id}
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        revision = _revision(
+            item,
+            f"contributing_revision_ids[{index}]",
+            visible_revision_ids,
+        )
+        if revision == source_reference:
+            raise ValueError(
+                f"contributing_revision_ids[{index}] repeats the selected Source base"
+            )
+        if revision not in creditable:
+            raise ValueError(
+                f"contributing_revision_ids[{index}] must name completed Lineage history"
+            )
+        normalized.append(revision)
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("contributing_revision_ids cannot contain duplicates")
+    if normalized != sorted(normalized):
+        raise ValueError("contributing_revision_ids must be sorted")
     return normalized
 
 
@@ -98,15 +145,7 @@ def _validated_output(
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ValueError("Evolution output must be a JSON object")
     proposal_type = value.get("proposal_type")
-    fields = {
-        "proposal_type",
-        "kernel_agent_revision_id",
-        "hypothesis",
-        "expected_effect",
-        "changed_paths",
-        "unimplemented_capabilities",
-    }
-    if set(value) != fields:
+    if set(value) != EVOLUTION_OUTPUT_FIELDS:
         raise ValueError("Evolution output fields are invalid")
     _text(value.get("hypothesis"), "hypothesis", max_length=4000)
     _text(value.get("expected_effect"), "expected_effect", max_length=4000)
@@ -117,6 +156,13 @@ def _validated_output(
         visible_revision_ids,
     )
     changed_paths = _changed_paths(value["changed_paths"])
+    contributing = _contributing_revision_ids(
+        value["contributing_revision_ids"],
+        source_reference=source_reference,
+        active_revision_id=active_revision_id,
+        visible_revision_ids=visible_revision_ids,
+        historical_revision_ids=historical_revision_ids,
+    )
     if proposal_type == "reuse":
         if source_reference == active_revision_id:
             raise ValueError("reuse cannot select the current Active revision")
@@ -124,6 +170,8 @@ def _validated_output(
             raise ValueError("reuse must select completed Lineage history")
         if changed_paths:
             raise ValueError("reuse requires changed_paths to be empty")
+        if contributing:
+            raise ValueError("reuse requires contributing_revision_ids to be empty")
     elif proposal_type in {"evolved", "evolve_from_history"}:
         if proposal_type == "evolved" and source_reference != active_revision_id:
             raise ValueError("evolved must use the current Active Source revision")

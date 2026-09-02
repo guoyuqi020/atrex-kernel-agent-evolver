@@ -12,22 +12,17 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from report import EvolutionOutputContractError, validate_evolution_output
+from report import (
+    EVOLUTION_OUTPUT_FIELDS,
+    EvolutionOutputContractError,
+    validate_evolution_output,
+)
 
 _CONTEXT_ENV = "EVOLUTION_REPORT_CONTEXT_JSON"
 _IGNORED_DIRECTORIES = frozenset({".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__"})
 _IGNORED_FILES = frozenset({".coverage", ".DS_Store"})
 _IGNORED_SUFFIXES = frozenset({".pyc", ".pyo"})
-_REPORT_FIELDS = frozenset(
-    {
-        "proposal_type",
-        "kernel_agent_revision_id",
-        "hypothesis",
-        "expected_effect",
-        "changed_paths",
-        "unimplemented_capabilities",
-    }
-)
+_REPORT_FIELDS = EVOLUTION_OUTPUT_FIELDS
 
 
 class EvolutionReportIssue(ValueError):
@@ -74,6 +69,15 @@ def request_schema() -> dict[str, Any]:
                 "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1},
             },
+            "contributing_revision_ids": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": True,
+                "items": {
+                    "type": "string",
+                    "pattern": r"^agentrev_[0-9a-f]{32}$",
+                },
+            },
             "unimplemented_capabilities": {
                 "type": "array",
                 "maxItems": 64,
@@ -118,6 +122,7 @@ def _context(workspace: Path) -> dict[str, Any]:
         if not isinstance(item, dict) or set(item) != {
             "revision_id",
             "relationship",
+            "parent",
             "source_path",
         }:
             raise ValueError(f"visible_agents[{index}] fields are invalid")
@@ -126,7 +131,9 @@ def _context(workspace: Path) -> dict[str, Any]:
         if (
             not isinstance(revision_id, str)
             or revision_id in seen
-            or relationship not in {"active", "current_epoch_challenger", "lineage_history"}
+            or not isinstance(item.get("parent"), bool)
+            or relationship
+            not in {"active", "challenger", "current_epoch_challenger", "lineage_history"}
         ):
             raise ValueError(f"visible_agents[{index}] identity is invalid")
         _safe_workspace_path(workspace, item.get("source_path"), "visible Agent source_path")
@@ -251,16 +258,12 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
     max_bytes = int(context["max_report_bytes"])
     agents = context["visible_agents"]
     assert isinstance(agents, list)
-    visible = {
-        str(item["revision_id"]): item
-        for item in agents
-        if isinstance(item, dict)
-    }
+    visible = {str(item["revision_id"]): item for item in agents if isinstance(item, dict)}
     active = str(context["active_revision_id"])
     historical = frozenset(
         revision_id
         for revision_id, item in visible.items()
-        if item.get("relationship") == "lineage_history"
+        if item.get("parent") is not True and item.get("relationship") != "current_epoch_challenger"
     )
     try:
         report = validate_evolution_output(

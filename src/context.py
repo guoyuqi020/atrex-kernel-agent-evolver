@@ -27,7 +27,7 @@ class VisibleAgent:
     """One Runtime-validated read-only Optimizer design."""
 
     revision_id: str
-    version: str | None
+    version: str
     optimizer_digest: str
     path: str
     root: Path
@@ -35,6 +35,8 @@ class VisibleAgent:
     optimization_summary_root: Path
     sessions_path: str | None
     sessions_root: Path | None
+    reports_path: str | None
+    reports_root: Path | None
     runtime_state_path: str
     runtime_state_root: Path
     runtime_state_trajectory_ordinals: tuple[int, ...]
@@ -186,7 +188,7 @@ class EvolutionContext:
                 "Evolution input fields disagree with schema: "
                 f"{sorted(set(manifest) ^ expected_fields)}"
             )
-        if manifest["schema_version"] != 10:
+        if manifest["schema_version"] != 11:
             raise ValueError("unsupported Evolution input schema_version")
         parent_revision_id = _text(manifest["parent_revision_id"], "parent_revision_id")
         if _REVISION_ID.fullmatch(parent_revision_id) is None:
@@ -205,22 +207,17 @@ class EvolutionContext:
         paths = _object(manifest["paths"], "Evolution paths")
         expected_paths = {
             "agents": "input/agents",
-            "historical": "input/historical",
             "evidence": "input/evidence",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-report.json",
         }
         if paths != expected_paths:
-            raise ValueError("Evolution paths disagree with protocol v10")
+            raise ValueError("Evolution paths disagree with protocol v11")
 
         agents_root = _real_directory(
             _expected_path(workspace, expected_paths["agents"], "agents path"),
             "Visible Agent repositories",
-        )
-        historical_root = _real_directory(
-            _expected_path(workspace, expected_paths["historical"], "historical path"),
-            "Historical Agent repositories",
         )
         evidence_root = _real_directory(
             _expected_path(workspace, expected_paths["evidence"], "evidence path"),
@@ -259,6 +256,7 @@ class EvolutionContext:
                 "path",
                 "optimization_summary_path",
                 "sessions_path",
+                "reports_path",
                 "runtime_state_path",
                 "parent",
                 "relationship",
@@ -266,9 +264,9 @@ class EvolutionContext:
                 "parent_revision_id",
                 "created_by",
             }:
-                raise ValueError("visible Agent fields disagree with protocol v10")
+                raise ValueError("visible Agent fields disagree with protocol v11")
             revision_id = _text(visible["revision_id"], "visible Agent revision_id")
-            version = visible["version"]
+            version = _text(visible["version"], "visible Agent version", max_length=64)
             digest = _text(visible["optimizer_digest"], "visible Agent optimizer_digest")
             relative = _text(visible["path"], "visible Agent path")
             optimization_summary_relative = _text(
@@ -276,6 +274,7 @@ class EvolutionContext:
                 "visible Agent optimization summary path",
             )
             sessions_relative = visible["sessions_path"]
+            reports_relative = visible["reports_path"]
             runtime_state_relative = _text(
                 visible["runtime_state_path"],
                 "visible Agent runtime-state path",
@@ -295,26 +294,24 @@ class EvolutionContext:
             )
             if (
                 _REVISION_ID.fullmatch(revision_id) is None
-                or (
-                    version is not None
-                    and (
-                        not isinstance(version, str)
-                        or re.fullmatch(r"agent-v[0-9]+", version) is None
-                    )
-                )
+                or re.fullmatch(r"agent-v[0-9]+", version) is None
                 or _DIGEST.fullmatch(digest) is None
                 or not isinstance(parent, bool)
-                or relationship not in {"active", "current_epoch_challenger", "lineage_history"}
-                or parent != (relationship == "active")
+                or relationship
+                not in {"active", "challenger", "current_epoch_challenger", "lineage_history"}
+                or (parent and relationship not in {"active", "challenger"})
                 or (
-                    relationship == "current_epoch_challenger"
+                    relationship in {"challenger", "current_epoch_challenger"}
                     and (
                         not isinstance(challenger_ordinal, int)
                         or isinstance(challenger_ordinal, bool)
                         or challenger_ordinal <= 0
                     )
                 )
-                or (relationship != "current_epoch_challenger" and challenger_ordinal is not None)
+                or (
+                    relationship not in {"challenger", "current_epoch_challenger"}
+                    and challenger_ordinal is not None
+                )
                 or (
                     visible_parent_revision_id is not None
                     and (
@@ -325,32 +322,20 @@ class EvolutionContext:
                 or revision_id in seen_revisions
             ):
                 raise ValueError("visible Agent entry is invalid")
-            if relationship == "active":
-                expected_relative = "input/agents/active/source"
-                expected_summary = "input/evidence/active/optimization-summary.json"
-                expected_sessions = "input/evidence/active/sessions"
-                expected_runtime_state = "input/agents/active/runtime-state"
-            elif relationship == "current_epoch_challenger":
-                assert isinstance(challenger_ordinal, int)
-                role = f"challenger-{challenger_ordinal:04d}"
-                expected_relative = f"input/agents/{role}/source"
-                expected_summary = f"input/evidence/{role}/optimization-summary.json"
-                expected_sessions = f"input/evidence/{role}/sessions"
-                expected_runtime_state = f"input/agents/{role}/runtime-state"
-            else:
-                if not isinstance(version, str):
-                    raise ValueError("historical visible Agent requires a version")
-                expected_relative = f"input/historical/{version}/source"
-                expected_summary = f"input/historical/{version}/optimization-summary.json"
-                expected_sessions = None
-                expected_runtime_state = f"input/historical/{version}/runtime-state"
+            competed = relationship in {"active", "challenger"}
+            expected_relative = f"input/agents/{version}/source"
+            expected_runtime_state = f"input/agents/{version}/runtime-state"
+            expected_summary = f"input/evidence/{version}/optimization-summary.json"
+            expected_sessions = f"input/evidence/{version}/sessions" if competed else None
+            expected_reports = f"input/evidence/{version}/reports" if competed else None
             if (
                 relative != expected_relative
                 or optimization_summary_relative != expected_summary
                 or sessions_relative != expected_sessions
+                or reports_relative != expected_reports
                 or runtime_state_relative != expected_runtime_state
             ):
-                raise ValueError("visible Agent paths disagree with its role")
+                raise ValueError("visible Agent paths disagree with its version")
             root = _real_directory(
                 _expected_path(workspace, relative, "visible Agent path"),
                 f"Visible Agent {revision_id}",
@@ -371,6 +356,14 @@ class EvolutionContext:
                 else _real_directory(
                     _expected_path(workspace, expected_sessions, "visible Agent Sessions"),
                     f"Visible Agent {revision_id} Sessions",
+                )
+            )
+            reports_root = (
+                None
+                if expected_reports is None
+                else _real_directory(
+                    _expected_path(workspace, expected_reports, "visible Agent Attempt reports"),
+                    f"Visible Agent {revision_id} Attempt reports",
                 )
             )
             runtime_state_root = _real_directory(
@@ -396,6 +389,8 @@ class EvolutionContext:
                     optimization_summary_root,
                     expected_sessions,
                     sessions_root,
+                    expected_reports,
+                    reports_root,
                     runtime_state_relative,
                     runtime_state_root,
                     runtime_state_trajectory_ordinals,
@@ -407,26 +402,13 @@ class EvolutionContext:
                 )
             )
             seen_revisions.add(revision_id)
-        participant_names = {
-            "active",
-            *(
-                f"challenger-{item.challenger_ordinal:04d}"
-                for item in visible_agents
-                if item.relationship == "current_epoch_challenger"
-                and item.challenger_ordinal is not None
-            ),
-        }
-        historical_names = {
-            item.version
-            for item in visible_agents
-            if item.relationship == "lineage_history" and item.version is not None
-        }
-        if {child.name for child in agents_root.iterdir()} != participant_names:
-            raise ValueError("participant Agent directories disagree with the manifest")
-        if {child.name for child in historical_root.iterdir()} != historical_names:
-            raise ValueError("historical Agent directories disagree with the manifest")
-        if {child.name for child in evidence_root.iterdir()} != participant_names:
-            raise ValueError("participant Evidence directories disagree with the manifest")
+        visible_versions = {item.version for item in visible_agents}
+        if len(visible_versions) != len(visible_agents):
+            raise ValueError("visible Agent versions are duplicated")
+        if {child.name for child in agents_root.iterdir()} != visible_versions:
+            raise ValueError("visible Agent directories disagree with the manifest")
+        if {child.name for child in evidence_root.iterdir()} != visible_versions:
+            raise ValueError("visible Evidence directories disagree with the manifest")
         parents = [item for item in visible_agents if item.parent]
         if (
             len(parents) != 1
