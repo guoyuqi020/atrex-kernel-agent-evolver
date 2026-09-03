@@ -16,7 +16,7 @@ run-<uuid>/
 │   ├── agents/                # every visible Agent version, one location each
 │   │   └── agent-v<N>/
 │   │       ├── source/        # exact versioned Agent repository
-│   │       └── runtime-state/ # per-Trajectory skills/tools
+│   │       └── runtime-state/ # per-Trajectory memory/docs/memory/docs/skills/tools
 │   ├── evidence/              # read-only authorized execution Evidence
 │   │   └── agent-v<N>/
 │   │       ├── optimization-summary.json
@@ -25,7 +25,7 @@ run-<uuid>/
 │   └── evolution-reports/     # prior Agent-creation reports
 ├── candidate/                 # writable Agent Candidate
 │   ├── source/                # complete versioned Bundle
-│   └── runtime-state/         # one common {skills,tools} seed
+│   └── runtime-state/         # one common {memory,docs,skills,tools} seed
 └── scratch/                   # writable report, trace, and isolated Agent state
 ```
 
@@ -71,13 +71,15 @@ remain private Runtime history, and current-Epoch Challengers have neither becau
 run no Attempt. Runtime also projects each available prior Agent-creation `EvolutionOutput` into ordered
 `input/evolution-reports/evo-N.json` wrappers that link the Source Base and produced Agent to their
 visible Source and Runtime State paths. Full Evolution traces remain private. Per-Trajectory
-adaptive `skills/` and `tools/` live under the corresponding `runtime-state/` beside that version's
+adaptive `memory/`, `docs/`, `skills/`, and `tools/` live under the corresponding `runtime-state/` beside that version's
 source, co-locating source, accumulated effect, and runtime state. They are
-non-versioned Lineage state and are the only adaptive Skill/Tool storage. Top-level `skills/` and
+non-versioned Lineage state and are the adaptive State storage. Top-level `skills/` and
 `tools/` are reserved and invalid in versioned source. Evolver may curate the writable
 `candidate/runtime-state/` directly or improve the source mechanism that governs its future use.
 Runtime seals complete Candidate Source and State independently, then pairs both Digests as one
-logical Bundle. That exact State initializes every new Trajectory.
+logical Bundle. That exact State initializes every new Trajectory. Each of the four directories must
+contain a README index updated with every content change; their roles are search memories, knowledge,
+procedures, and scripts. Source's own implementation documentation is separate from adaptive Docs.
 Each optimization summary separates the Agent Revision's most recent completed Epoch from its
 career record. The latest-Epoch section counts correct, incorrect, and missing Candidate Kernels and
 embeds the best correct Kernel's authoritative per-Shape Gateway projection. The career section
@@ -113,7 +115,7 @@ reuse one visible historical revision unchanged, or derive a new revision from o
 historical revision. New-revision proposals include an exact sorted changed-path declaration
 relative to the selected Source base. Runtime computes State changes privately. A Candidate may also
 combine content from several visible Agents; `contributing_revision_ids` names every revision other
-than the Source base whose Source, Skills, or Tools it drew from, restricted to completed Lineage
+than the Source base whose Source or Runtime State it drew from, restricted to completed Lineage
 history or the Active. That is provenance, not parentage: the Source base and the diff target remain
 the single declared revision. Every mode
 may include bounded structured

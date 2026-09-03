@@ -16,7 +16,7 @@ run-<uuid>/
 │   ├── agents/                # 每个可见 Agent 版本，各一处
 │   │   └── agent-v<N>/
 │   │       ├── source/        # 精确版本化 Agent 仓库
-│   │       └── runtime-state/ # 各 Trajectory 的 skills/tools
+│   │       └── runtime-state/ # 各 Trajectory 的 memory/docs/memory/docs/skills/tools
 │   ├── evidence/              # 只读、已授权的运行 Evidence
 │   │   └── agent-v<N>/
 │   │       ├── optimization-summary.json
@@ -25,7 +25,7 @@ run-<uuid>/
 │   └── evolution-reports/     # 此前的 Agent 创建报告
 ├── candidate/                 # 可写 Agent Candidate
 │   ├── source/                # 完整版本化 Bundle
-│   └── runtime-state/         # 唯一一份公共 {skills,tools} 种子
+│   └── runtime-state/         # 唯一一份公共 {memory,docs,skills,tools} 种子
 └── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
 ```
 
@@ -63,12 +63,14 @@ Trajectory 组织；Bootstrap 与更早 Epoch 的 Conversation 仍属于 Runtime
 Challenger 因尚未运行任何 Attempt 而两者皆无。可用的历史 Agent
 创建 `EvolutionOutput` 投影成有序的 `input/evolution-reports/evo-N.json` Wrapper，其中关联 Source Base、
 产出 Agent 以及各自在本 Workspace 的 Source/Runtime State 路径；完整 Evolution Trace 保持私有。各
-Trajectory 持久积累的自适应 `skills/` 与 `tools/` 位于该版本源码旁边的
+Trajectory 持久积累的自适应 `memory/`、`docs/`、`skills/` 与 `tools/` 位于该版本源码旁边的
 `runtime-state/` 下，把精确源码、累计优化效果与运行时状态放在一起。这些内容是非版本化
-Lineage 状态，也是唯一的自适应 Skill/Tool 存储。根级 `skills/` 和 `tools/` 在版本化 Source 中
+Lineage 状态，也是自适应 State 存储。根级 `skills/` 和 `tools/` 在版本化 Source 中
 无效。Evolver 可以直接整理 `candidate/runtime-state/`，也可以修改控制未来如何使用状态的 Source
 机制。Runtime 始终分别封存 Candidate Source 与 State，并把两者组合为同一个不可变 Agent Bundle；
 后续每条新 Trajectory 都从这个 Bundle 的 State 初始化。State 是否相对输入发生修改不影响封存。
+四目录分别保存搜索记忆、知识、技能流程和工具脚本，各自必须维护随内容变化同步更新的 README。
+Source 内的实现文档与自适应 Docs 分开存储。
 Catalog
 同时明确提供 Parent Link、创建者、关系类型以及适用时的
 Challenger Ordinal。

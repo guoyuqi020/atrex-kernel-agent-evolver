@@ -56,7 +56,7 @@ Transcript，并标记为 `state: interrupted`。高频 Claude `system/thinking_
 
 渲染后的 Session Context 会列出全部授权 Agent Repository、优化汇总、Session 目录和 Runtime State
 目录，Evolver 直接读取这些不可变文件。可写的 `candidate/source/` 初始镜像 Active Source；
-`candidate/runtime-state/{skills,tools}/` 初始取最近完成 Epoch 的获胜分支中、产出最佳 Kernel 的
+`candidate/runtime-state/{memory,docs,skills,tools}/` 初始取最近完成 Epoch 的获胜分支中、产出最佳 Kernel 的
 Trajectory 在该 Epoch 最后一个 Attempt 结束后的终态 State；下一 Epoch 的 Active Branch 使用完全
 相同的 State 种子。缺失终态检查点时，依次回退到该 Trajectory 的 Epoch 起始 State、Revision Seed
 和空默认值。

@@ -20,6 +20,7 @@ _REVISION_ID = re.compile(r"^agentrev_[0-9a-f]{32}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _TRAJECTORY_DIRECTORY = re.compile(r"^trajectory-([0-9]{8})$")
 _EVOLUTION_REPORT_FILE = re.compile(r"^evo-([1-9][0-9]*)\.json$")
+RUNTIME_STATE_DIRECTORIES = ("memory", "docs", "skills", "tools")
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,21 @@ def _real_directory(path: Path, label: str) -> Path:
     return path.resolve()
 
 
+def validate_adaptive_directories(root: Path, label: str) -> None:
+    _real_directory(root, label)
+    if {child.name for child in root.iterdir()} != set(RUNTIME_STATE_DIRECTORIES):
+        raise ValueError(f"{label} must contain exactly memory/, docs/, skills/, tools/")
+    for name in RUNTIME_STATE_DIRECTORIES:
+        tree = _real_directory(root / name, f"{label} {name}")
+        for entry in tree.rglob("*"):
+            mode = entry.lstat().st_mode
+            if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                raise ValueError(f"{label} {name} contains an invalid entry")
+        readme = tree / "README.md"
+        if readme.is_symlink() or not readme.is_file():
+            raise ValueError(f"{label} {name}/README.md must be a regular file")
+
+
 def _validate_runtime_state(root: Path, revision_id: str) -> tuple[int, ...]:
     """Validate one Runtime-authored, read-only Agent-state Evidence projection."""
     if {child.name for child in root.iterdir()} != {"trajectories"}:
@@ -103,21 +119,9 @@ def _validate_runtime_state(root: Path, revision_id: str) -> tuple[int, ...]:
             trajectory,
             f"Agent {revision_id} runtime-state trajectory {ordinal}",
         )
-        if {child.name for child in root.iterdir()} != {"skills", "tools"}:
-            raise ValueError(
-                f"Agent {revision_id} runtime-state trajectory {ordinal} must contain skills/tools"
-            )
-        for name in ("skills", "tools"):
-            tree = _real_directory(
-                root / name,
-                f"Agent {revision_id} runtime-state trajectory {ordinal} {name}",
-            )
-            for entry in tree.rglob("*"):
-                mode = entry.lstat().st_mode
-                if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
-                    raise ValueError(
-                        f"Agent {revision_id} runtime-state {name} contains an invalid entry"
-                    )
+        validate_adaptive_directories(
+            root, f"Agent {revision_id} runtime-state trajectory {ordinal}"
+        )
         ordinals.append(ordinal)
     return tuple(ordinals)
 
@@ -431,20 +435,7 @@ class EvolutionContext:
             candidate_root / "runtime-state",
             "Candidate runtime-state",
         )
-        if {child.name for child in candidate_runtime_state.iterdir()} != {"skills", "tools"}:
-            raise ValueError("Candidate runtime-state must contain exactly skills/ and tools/")
-        for name in ("skills", "tools"):
-            tree = _real_directory(
-                candidate_runtime_state / name,
-                f"Candidate runtime-state {name}",
-            )
-            for entry in tree.rglob("*"):
-                mode = entry.lstat().st_mode
-                if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
-                    raise ValueError(f"Candidate runtime-state {name} contains an invalid entry")
-        tools_readme = candidate_runtime_state / "tools/README.md"
-        if tools_readme.is_symlink() or not tools_readme.is_file():
-            raise ValueError("Candidate runtime-state tools/README.md must be a regular file")
+        validate_adaptive_directories(candidate_runtime_state, "Candidate runtime-state")
         scratch_root = _real_directory(
             _expected_path(workspace, expected_paths["scratch"], "scratch path"),
             "Evolution scratch",

@@ -28,7 +28,10 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    (workspace / "candidate/runtime-state/tools/README.md").write_text("# Tools\n")
+    for name in ("memory", "docs", "skills", "tools"):
+        directory = workspace / "candidate/runtime-state" / name
+        directory.mkdir(exist_ok=True)
+        (directory / "README.md").write_text(f"# {name}\n")
     (workspace / "input/evidence/agent-v0/optimization-summary.json").write_text("{}")
     manifest = {
         "schema_version": 11,

@@ -37,7 +37,10 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "candidate/runtime-state",
         "scratch/.evolution-report/runtime-state-base",
     ):
-        (workspace / prefix / "tools/README.md").write_text("# Tools\n")
+        for name in ("memory", "docs", "skills", "tools"):
+            directory = workspace / prefix / name
+            directory.mkdir(exist_ok=True)
+            (directory / "README.md").write_text(f"# {name}\n")
     context = {
         "active_revision_id": ACTIVE,
         "visible_agents": [
@@ -220,17 +223,40 @@ def test_evolution_report_guides_source_diff_repair_and_publishes_once(
         evolution_report(workspace, draft)
 
 
+@pytest.mark.parametrize("directory", ("memory", "docs", "skills", "tools"))
 def test_evolution_report_accepts_state_only_revision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    directory: str,
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
-    (workspace / "candidate/runtime-state/skills/search.md").write_text("measured search\n")
+    (workspace / "candidate/runtime-state" / directory / "search.md").write_text(
+        "measured search\n"
+    )
 
     receipt = evolution_report(workspace, _draft(workspace, changed_paths=[]))
 
     assert receipt["source_changed_count"] == 0
     assert receipt["runtime_state_changed"] is True
+
+
+@pytest.mark.parametrize("directory", ("memory", "docs", "skills", "tools"))
+def test_report_allows_repairing_a_missing_state_index(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    directory: str,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    readme = workspace / "candidate/runtime-state" / directory / "README.md"
+    readme.unlink()
+    draft = _draft(workspace, changed_paths=[])
+    with pytest.raises(EvolutionReportIssue) as caught:
+        evolution_report(workspace, draft)
+    assert caught.value.issues[0]["code"] == "invalid_runtime_state"
+    assert "retry evolution-report" in caught.value.issues[0]["hint"]
+    assert not (workspace / "scratch/evolution-report.json").exists()
+    readme.write_text("repaired current index")
+    assert evolution_report(workspace, draft)["status"] == "published"
 
 
 def test_evolution_report_cli_returns_schema_and_recovery_on_error(

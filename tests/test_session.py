@@ -60,7 +60,10 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    (workspace / "candidate/runtime-state/tools/README.md").write_text("# Tools\n")
+    for name in ("memory", "docs", "skills", "tools"):
+        directory = workspace / "candidate/runtime-state" / name
+        directory.mkdir(exist_ok=True)
+        (directory / "README.md").write_text(f"# {name}\n")
     (workspace / "input/evidence/agent-v0/optimization-summary.json").write_text("{}")
     (workspace / "input/agents/agent-v0/source/atrex-bundle.json").write_text("{}")
     (workspace / "candidate/source/atrex-bundle.json").write_text("{}")
@@ -490,7 +493,7 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "`relationship` is not `current_epoch_challenger`" in prompt
     assert "when its `parent` is false" in prompt
     assert "candidate/runtime-state/" in prompt
-    assert "reusable `skills/` and `tools/` seed" in prompt
+    assert "adaptive `memory/`, `docs/`, `skills/`, and `tools/` seed" in prompt
     assert "python3 input/evolver/src/runtime_tools.py evolution-report" in prompt
     assert "scratch/evolution-report-draft.json" in prompt
     assert "never write `scratch/evolution-report.json` directly" in prompt

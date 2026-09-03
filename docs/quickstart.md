@@ -60,7 +60,7 @@ the available partial transcript with `state: interrupted`. The high-frequency C
 
 The rendered Session context lists every authorized Agent repository, optimization summary, Session
 directory, and runtime-state directory. Evolver reads those immutable files directly. Writable
-`candidate/source/` mirrors Active Source. `candidate/runtime-state/{skills,tools}/` starts from the
+`candidate/source/` mirrors Active Source. `candidate/runtime-state/{memory,docs,skills,tools}/` starts from the
 latest completed Epoch's winning branch and best-Kernel Trajectory, using its terminal State after
 the last Attempt in that Epoch. The next Epoch's Active Branch uses the same State seed. When no
 terminal checkpoint exists, Runtime falls back to that Trajectory's Epoch-start State, the revision

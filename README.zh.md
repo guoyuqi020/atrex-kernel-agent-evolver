@@ -37,7 +37,7 @@ Claude 使用全新 Session ID 并启用原生持久化，不恢复旧上下文�
 封存后的 `conversation.jsonl` 是阅读视图：Claude 优先使用原生内容，省去已被完整覆盖的 stdout 消息副本，保留不同的 thinking/text/tool 内容块、未被覆盖的 stdout 内容、诊断、压缩边界和终态结果。重复的初始 Prompt，以及原生队列、标题、文件历史等内部管理事件只从阅读视图中省去。封存前的实时视图仍跟随 stdout。原始 Provider 文件及规范化 usage 索引不变。
 
 Coding Agent 对 Candidate 的两个组件都拥有设计权限：可以在 `candidate/source/` 中增加、替换、
-重组或删除版本化 Optimizer 内容，也可以直接整理 `candidate/runtime-state/` 中唯一一份 Skills/Tools
+重组或删除版本化 Optimizer 内容，也可以直接整理 `candidate/runtime-state/` 中唯一一份 Memory/Docs/Skills/Tools
 Checkpoint。Runtime 将完整 Source 与 State 组成逻辑 Bundle，并把该 State 复制给所有新 Trajectory。
 版本化 Source 根级仍禁止 `skills/` 与 `tools/`。
 当 Evidence 支持时，它可以整体替换现有设计，以提高 Agent 做 Kernel

@@ -43,7 +43,7 @@ The sealed `conversation.jsonl` is a reading view: Claude native content takes p
 
 The Coding Agent has full design authority over both Candidate components. It may add, replace,
 reorganize, or delete versioned Optimizer content under `candidate/source/`, and it may curate the
-single Skills/Tools checkpoint under `candidate/runtime-state/`. Runtime pairs the complete Source
+single Memory/Docs/Skills/Tools checkpoint under `candidate/runtime-state/`. Runtime pairs the complete Source
 and State as one logical Bundle and copies that State into every new Trajectory. Top-level
 `skills/` and `tools/` remain
 invalid in the versioned source. It may replace the

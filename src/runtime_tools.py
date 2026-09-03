@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from context import validate_adaptive_directories
 from report import (
     EVOLUTION_OUTPUT_FIELDS,
     EvolutionOutputContractError,
@@ -288,6 +289,22 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
         context["candidate_runtime_state"],
         "candidate_runtime_state",
     )
+    try:
+        validate_adaptive_directories(candidate_state, "Candidate runtime-state")
+    except ValueError as error:
+        raise EvolutionReportIssue(
+            str(error),
+            [
+                {
+                    "path": "candidate/runtime-state",
+                    "code": "invalid_runtime_state",
+                    "message": str(error),
+                    "hint": "Keep memory/, docs/, skills/, tools/ and a current README.md in each; "
+                    "use only regular files/directories, repair the State, "
+                    "then retry evolution-report.",
+                }
+            ],
+        ) from error
     state_base = _safe_workspace_path(
         workspace,
         context["runtime_state_base"],
