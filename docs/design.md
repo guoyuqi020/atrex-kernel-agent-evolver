@@ -145,8 +145,7 @@ request lacks complete provider buckets.
 
 The Session Artifact preserves the final rendered Prompt at `input/prompt.md`, the captured Provider
 stream at `provider/stdout.stream-json`, and captured Provider stderr at
-`provider/stderr.log`. `conversation.jsonl` combines the exact Runtime input, every retained
-Provider stdout event, any raw Codex rollout, and the terminal capture status. It explicitly marks
+`provider/stderr.log`. The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged. It explicitly marks
 Provider-managed system instructions unavailable when the CLI does not export them. Runtime and
 Evolver apply no redaction or text rewriting to retained events. They omit only the high-frequency
 Claude `system/thinking_tokens` estimate event and disclose that selection in

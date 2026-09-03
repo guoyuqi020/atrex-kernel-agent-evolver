@@ -129,8 +129,7 @@ SIGTERM/SIGINT 会转发给该进程组，Timeout 与 stdout/stderr 均受限。
 
 Session Artifact 把最终渲染 Prompt 原样保存到 `input/prompt.md`，把捕获的 Provider Stream
 保存到 `provider/stdout.stream-json`，并把 Provider stderr 保存到
-`provider/stderr.log`。`conversation.jsonl` 合并准确 Runtime 输入、每条保留的 Provider stdout
-Event、Codex 原始 Rollout（如有）和捕获终态。CLI 未导出的 Provider 内置 System Prompt 会被
+`provider/stderr.log`。封存后的 `conversation.jsonl` 是阅读视图：Claude 优先使用原生内容，省去已被完整覆盖的 stdout 消息副本，保留不同的 thinking/text/tool 内容块、未被覆盖的 stdout 内容、诊断、压缩边界和终态结果。重复的初始 Prompt，以及原生队列、标题、文件历史等内部管理事件只从阅读视图中省去。封存前的实时视图仍跟随 stdout。原始 Provider 文件及规范化 usage 索引不变。CLI 未导出的 Provider 内置 System Prompt 会被
 明确标记为不可获取。Runtime 与 Evolver 不对保留事件做脱敏或文本改写；它们只省略高频 Claude
 `system/thinking_tokens` 估算事件，并通过 `session.json.provider_event_filters` 明确声明，最终权威
 Usage 仍保存在 `events.jsonl`。Provider 输出的 Reasoning、Tool 参数与结果、Credential 或其他敏感字段因此会原样

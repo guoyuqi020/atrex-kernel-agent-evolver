@@ -37,6 +37,10 @@ mandatory telemetry, while process wall time and output bounds remain safety lim
 publishes `TokenUsageReportV1` with a null budget; Codex usage and raw rollout capture are obtained
 from its isolated Session Ledger.
 
+Claude uses a fresh session ID with native persistence enabled; it never resumes prior context. Its native main/child JSONLs are retained under `provider/claude-session.raw-jsonl` and `provider/claude-subagents/`, including on timeout or failure. `events.jsonl` contains one latest usage record per response, with `message_id` and `source_path` for joining back to tool calls. Print-stream counters are provisional; repeated updates replace earlier counters. `session.json.response_usage_complete` is true only when native response counters reconcile with the terminal bill. Gaps remain partial with diagnostics; the terminal bill is not replaced with estimates. Do not sum native and stdout copies, or add the terminal bill to response usage.
+
+The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged.
+
 The Coding Agent has full design authority over both Candidate components. It may add, replace,
 reorganize, or delete versioned Optimizer content under `candidate/source/`, and it may curate the
 single Skills/Tools checkpoint under `candidate/runtime-state/`. Runtime pairs the complete Source

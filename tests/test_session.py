@@ -22,6 +22,30 @@ DIGEST = "sha256:" + "a" * 64
 EVIDENCE_PROMPT = "# Evidence input\n\nInjected by the trusted controller.\n"
 
 
+@pytest.fixture(autouse=True)
+def isolated_claude_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+
+
+def _with_native_ledger(script: str) -> str:
+    return script.replace(
+        "from pathlib import Path\n",
+        """from pathlib import Path
+import builtins
+import sys
+
+session_id = sys.argv[sys.argv.index("--session-id") + 1]
+native = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects/test" / (session_id + ".jsonl")
+native.parent.mkdir(parents=True, exist_ok=True)
+def print(value, **kwargs):
+    if "file" not in kwargs:
+        with native.open("a") as output:
+            output.write(value + "\\n")
+    builtins.print(value, **kwargs)
+""",
+    )
+
+
 def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionContext:
     workspace = tmp_path / "run"
     for relative in (
@@ -170,6 +194,7 @@ print(json.dumps({
 """,
         encoding="utf-8",
     )
+    script.write_text(_with_native_ledger(script.read_text()))
     os.chmod(script, 0o700)
     return script
 
@@ -210,6 +235,7 @@ print(json.dumps({
 """,
         encoding="utf-8",
     )
+    script.write_text(_with_native_ledger(script.read_text()))
     os.chmod(script, 0o700)
     return script
 
@@ -250,6 +276,7 @@ print(json.dumps({{"type": "result", "usage": {{
 """,
         encoding="utf-8",
     )
+    script.write_text(_with_native_ledger(script.read_text()))
     os.chmod(script, 0o700)
     return script, ready, release
 
@@ -302,6 +329,12 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
     assert conversation[0]["provider_system_prompt"]["captured"] is False
     assert conversation[1]["role"] == "user"
     assert "Fixed evolution instructions." in conversation[1]["content"][0]["text"]
+    assistants = [row for row in conversation if row.get("event", {}).get("type") == "assistant"]
+    assert len(assistants) == 1
+    assert assistants[0]["path"] == "provider/claude-session.raw-jsonl"
+    assert (
+        context.session_trace_path / "provider/claude-session.raw-jsonl"
+    ).read_text() == provider_stdout
     assert any(
         row.get("event", {}).get("provider_credential") == "Bearer raw-provider-secret"
         for row in conversation

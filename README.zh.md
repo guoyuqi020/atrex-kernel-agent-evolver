@@ -32,6 +32,10 @@ Effort 与 Session Settings；空 Model 表示使用 Backend CLI 默认值。四
 仍是必需遥测，进程 Wall Time 与输出限制仍是安全边界。每次运行发布空 Budget 的
 `TokenUsageReportV1`；Codex Usage 与原始 Rollout 从隔离 Session Ledger 获取。
 
+Claude 使用全新 Session ID 并启用原生持久化，不恢复旧上下文。主会话和子会话 JSONL 分别保存在 `provider/claude-session.raw-jsonl`、`provider/claude-subagents/`，超时或失败时也尽力保留。`events.jsonl` 每个响应只保留最新 usage，并通过 `message_id`、`source_path` 关联原始工具调用。stdout 中间计数属于暂定值，重复更新替换旧值。只有原生逐响应计数与终态总账核对一致时，`session.json.response_usage_complete` 才为 true；缺失或不一致会标为 partial 并记录诊断，不用估算值替换终态总账。统计时不要重复累加 native/stdout 副本，也不要把终态总账再加到逐响应用量上。
+
+封存后的 `conversation.jsonl` 是阅读视图：Claude 优先使用原生内容，省去已被完整覆盖的 stdout 消息副本，保留不同的 thinking/text/tool 内容块、未被覆盖的 stdout 内容、诊断、压缩边界和终态结果。重复的初始 Prompt，以及原生队列、标题、文件历史等内部管理事件只从阅读视图中省去。封存前的实时视图仍跟随 stdout。原始 Provider 文件及规范化 usage 索引不变。
+
 Coding Agent 对 Candidate 的两个组件都拥有设计权限：可以在 `candidate/source/` 中增加、替换、
 重组或删除版本化 Optimizer 内容，也可以直接整理 `candidate/runtime-state/` 中唯一一份 Skills/Tools
 Checkpoint。Runtime 将完整 Source 与 State 组成逻辑 Bundle，并把该 State 复制给所有新 Trajectory。

@@ -407,6 +407,8 @@ def _write_trace(
                 "schema_version": 1,
                 "sequence": item.sequence,
                 "kind": item.kind,
+                "message_id": item.message_id,
+                "source_path": item.source_path,
                 "usage": (
                     None
                     if item.usage is None
@@ -450,6 +452,7 @@ def _write_trace(
             "returncode": result.exit_status,
             "timed_out": result.timed_out,
             "raw_provider_capture_complete": result.raw_provider_capture_complete,
+            "response_usage_complete": result.response_usage_complete,
             "conversation_capture_complete": result.raw_provider_capture_complete,
             "provider_system_prompt_capture": "provider_managed_unavailable",
             "provider_event_filters": list(FILTERED_PROVIDER_EVENTS),
@@ -514,12 +517,12 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             )
         )
         _write_trace(context, result, prompt, config, replace_live=live_trace)
-        if not result.raw_provider_capture_complete:
-            return 126
         if result.timed_out:
             return 124
         if result.exit_status != 0:
             return result.exit_status
+        if not result.raw_provider_capture_complete:
+            return 126
         validate_evolution_output(
             context.output_path,
             active_revision_id=context.parent_revision_id,
