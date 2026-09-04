@@ -76,7 +76,9 @@ Supplementary learned resources from available Trajectories are under
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`. Evolver can compare and
 synthesize eligible Agents' prompts, memory, knowledge, skills, tools, and hooks. Every adaptive
 directory must retain a README index updated on content changes. Knowledge is not the Bundle's
-engineering `docs/`; storing Hooks does not activate them.
+engineering `docs/`. Runtime installs Skill directories and `hooks/claude.json` / `hooks/codex.json`
+command-hook registrations only when starting the next Claude/Codex Optimizer session, into its
+private CLI Home. Candidate hooks are never activated in the Evolver session.
 
 Prior reports at `input/evolution-reports/evo-N.json` use `parent.path`, `generated_agent.path`,
 to reference complete Bundles. `report.contributing_paths` retains the original Session-relative

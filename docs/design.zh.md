@@ -68,7 +68,9 @@ Bootstrap 与更早 Epoch 的 Conversation 保持私有。
 各 Trajectory 的补充学习资源位于
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`，供 Evolver 比较和融合合格
 Agent 的 prompts、memory、knowledge、skills、tools、hooks。六目录必须维护随内容变化同步更新的
-README。Knowledge 不等于 Bundle 的工程 `docs/`；保存 Hooks 不等于启用 Hooks。
+README。Knowledge 不等于 Bundle 的工程 `docs/`。Runtime 在下一次 Claude/Codex Optimizer Session
+启动前，把 Skill 目录与 `hooks/claude.json` / `hooks/codex.json` 命令 Hook 注册到该 Session 的私有
+CLI Home；不会在 Evolver Session 中激活 Candidate 的 Hooks。
 
 历史报告 `input/evolution-reports/evo-N.json` 用 `parent.path`、`generated_agent.path` 指向完整 Bundle；
 `report.contributing_paths` 保留原始 Session 相对路径，不保证当前资源仍等于历史快照。报告是 Agent 的设计意图，不代表提案获胜；

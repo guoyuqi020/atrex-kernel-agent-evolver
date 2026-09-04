@@ -123,8 +123,12 @@ satisfies the same Runtime launch and terminal-output protocol.
 `README.md` index. Edit Prompts for the next Optimizer's phase instructions; preserve configuration
 paths and update the index. Use Memory for search experience, Knowledge for knowledge, Skills for procedures, and
 Tools for scripts, and Hooks for Claude/Codex hook scripts and configuration snippets.
-Document each hook's backend, event, invocation, activation steps, and verification status; storage
-alone does not activate hooks. Update the corresponding README whenever content is added, changed, renamed, or
+Use `skills/<name>/SKILL.md` with YAML name/description and backend-native command-hook definitions
+in `hooks/claude.json` or `hooks/codex.json`. Runtime installs them into the next Claude/Codex
+Optimizer session's private CLI Home, never into the Evolver or host/global configuration. Hook commands
+can reference `"$WORKSPACE_ROOT/hooks/script.py"`. Other backends only preserve these resources.
+Document each hook's event, invocation and verification status; installation does not prove execution.
+Update the corresponding README whenever content is added, changed, renamed, or
 removed. Keep indexes synchronized and concise, with tool invocation details where applicable.
 Each reusable directory has one effective copy in the Candidate; edit it directly.
 
