@@ -49,34 +49,34 @@ def print(value, **kwargs):
 def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionContext:
     workspace = tmp_path / "run"
     for relative in (
-        "input/agents/agent-v0/source",
-        "input/agents/agent-v0/runtime-state/trajectories",
+        "input/agents/agent-v0",
+        "input/evidence/agent-v0/resources/trajectories",
         "input/evidence/agent-v0/sessions",
         "input/evidence/agent-v0/reports",
         "input/evolution-reports",
-        "candidate/source",
-        "candidate/runtime-state/skills",
-        "candidate/runtime-state/tools",
+        "candidate",
+        "candidate/skills",
+        "candidate/tools",
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    for name in ("memory", "docs", "skills", "tools"):
-        directory = workspace / "candidate/runtime-state" / name
+    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+        directory = workspace / "candidate" / name
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")
     (workspace / "input/evidence/agent-v0/optimization-summary.json").write_text("{}")
-    (workspace / "input/agents/agent-v0/source/atrex-bundle.json").write_text("{}")
-    (workspace / "candidate/source/atrex-bundle.json").write_text("{}")
+    (workspace / "input/agents/agent-v0/atrex-bundle.json").write_text("{}")
+    (workspace / "candidate/atrex-bundle.json").write_text("{}")
     visible_agents: list[dict[str, Any]] = [
         {
             "revision_id": REVISION,
             "version": "agent-v0",
             "optimizer_digest": DIGEST,
-            "path": "input/agents/agent-v0/source",
+            "path": "input/agents/agent-v0",
             "optimization_summary_path": "input/evidence/agent-v0/optimization-summary.json",
             "sessions_path": "input/evidence/agent-v0/sessions",
             "reports_path": "input/evidence/agent-v0/reports",
-            "runtime_state_path": "input/agents/agent-v0/runtime-state",
+            "resources_path": "input/evidence/agent-v0/resources",
             "parent": True,
             "relationship": "active",
             "challenger_ordinal": None,
@@ -102,8 +102,8 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
     }
     if with_challenger:
         for relative in (
-            "input/agents/agent-v1/source",
-            "input/agents/agent-v1/runtime-state/trajectories",
+            "input/agents/agent-v1",
+            "input/evidence/agent-v1/resources/trajectories",
             "input/evidence/agent-v1/sessions",
             "input/evidence/agent-v1/reports",
         ):
@@ -114,11 +114,11 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
                 "revision_id": RIVAL,
                 "version": "agent-v1",
                 "optimizer_digest": DIGEST,
-                "path": "input/agents/agent-v1/source",
+                "path": "input/agents/agent-v1",
                 "optimization_summary_path": "input/evidence/agent-v1/optimization-summary.json",
                 "sessions_path": "input/evidence/agent-v1/sessions",
                 "reports_path": "input/evidence/agent-v1/reports",
-                "runtime_state_path": "input/agents/agent-v1/runtime-state",
+                "resources_path": "input/evidence/agent-v1/resources",
                 "parent": False,
                 "relationship": "challenger",
                 "challenger_ordinal": 1,
@@ -149,7 +149,7 @@ from pathlib import Path
 
 assert not any(key.startswith("ATREX_") for key in os.environ)
 assert "EVOLUTION_REPORT_CONTEXT_JSON" in os.environ
-candidate = Path("candidate/source")
+candidate = Path("candidate")
 (candidate / "prompts").mkdir(exist_ok=True)
 (candidate / "prompts/evolve-result.md").write_text("new policy\\n")
 Path("scratch/evolution-report.json").write_text(json.dumps({
@@ -158,7 +158,7 @@ Path("scratch/evolution-report.json").write_text(json.dumps({
     "hypothesis": "Use a narrower evidence-driven search policy.",
     "expected_effect": "Reduce repeated failed optimization directions.",
     "changed_paths": ["prompts/evolve-result.md"],
-    "contributing_revision_ids": [],
+    "contributing_paths": [],
     "unimplemented_capabilities": [],
 }))
 print(json.dumps({
@@ -210,7 +210,7 @@ import json
 import os
 from pathlib import Path
 
-candidate = Path("candidate/source")
+candidate = Path("candidate")
 (candidate / "prompts").mkdir(exist_ok=True)
 (candidate / "prompts/evolve-result.md").write_text("unbounded policy\\n")
 Path("scratch/evolution-report.json").write_text(json.dumps({
@@ -219,7 +219,7 @@ Path("scratch/evolution-report.json").write_text(json.dumps({
     "hypothesis": "Continue until the evolution direction is complete.",
     "expected_effect": "Avoid terminating evolution due to provider token count.",
     "changed_paths": ["prompts/evolve-result.md"],
-    "contributing_revision_ids": [],
+    "contributing_paths": [],
     "unimplemented_capabilities": [],
 }))
 
@@ -258,7 +258,7 @@ print(json.dumps({{"type": "assistant", "live": "first provider event"}}), flush
 Path({str(ready)!r}).write_text("ready")
 while not Path({str(release)!r}).exists():
     time.sleep(0.01)
-candidate = Path("candidate/source")
+candidate = Path("candidate")
 (candidate / "prompts").mkdir(exist_ok=True)
 (candidate / "prompts/evolve-result.md").write_text("live policy\\n")
 Path("scratch/evolution-report.json").write_text(json.dumps({{
@@ -267,7 +267,7 @@ Path("scratch/evolution-report.json").write_text(json.dumps({{
     "hypothesis": "Stream the Evolver trace while it runs.",
     "expected_effect": "Make active evolution sessions inspectable.",
     "changed_paths": ["prompts/evolve-result.md"],
-    "contributing_revision_ids": [],
+    "contributing_paths": [],
     "unimplemented_capabilities": [],
 }}))
 print(json.dumps({{"type": "result", "usage": {{
@@ -307,7 +307,7 @@ def test_session_mutates_candidate_and_emits_runtime_reports(tmp_path: Path) -> 
 
     assert execute(context, config) == 0
 
-    assert (context.candidate_root / "source/prompts/evolve-result.md").is_file()
+    assert (context.candidate_root / "prompts/evolve-result.md").is_file()
     usage = json.loads(context.token_usage_path.read_text())
     assert usage["usage_unit"] == "provider_tokens"
     assert usage["consumed"] == 28
@@ -470,17 +470,17 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert '"dsl": "triton"' in prompt
     assert "gateway" not in prompt.lower().split("# session context", 1)[1]
     assert "wiki" not in prompt.lower().split("# session context", 1)[1]
-    assert '"source_path": "input/agents/agent-v0/source"' in prompt
+    assert '"path": "input/agents/agent-v0"' in prompt
     assert '"relationship": "active"' in prompt
     assert '"challenger_ordinal": null' in prompt
     assert '"parent": true' in prompt
-    assert '"source_parent_revision_id": null' in prompt
+    assert '"parent_revision_id": null' in prompt
     assert '"optimization_summary_path": "input/evidence/agent-v0/' in prompt
     assert '"sessions_path": "input/evidence/agent-v0/sessions"' in prompt
     assert '"reports_path": "input/evidence/agent-v0/reports"' in prompt
-    assert '"runtime_state_path": "input/agents/agent-v0/runtime-state"' in prompt
+    assert '"resources_path": "input/evidence/agent-v0/resources"' in prompt
     assert '"evolution_reports": "input/evolution-reports"' in prompt
-    assert "`changed_paths`: exact sorted Source-relative regular-file diff" in prompt
+    assert "`changed_paths`: exact sorted regular-file diff" in prompt
     assert "intentionally\n   omit Revision IDs" not in prompt
     assert '"optimizer_digest"' not in prompt.split("# Session context", 1)[1]
     assert '"created_by"' not in prompt.split("# Session context", 1)[1]
@@ -489,11 +489,13 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "evolution-input.json" not in prompt
     assert "runtime-tools" not in prompt
     assert "candidate-reset" not in prompt
-    assert "Do not place top-level `skills/` or `tools/`" in prompt
+    assert "Each reusable directory has one effective copy" in prompt
+    assert "candidate/runtime-state" not in prompt
+    assert "candidate/source" not in prompt
     assert "`relationship` is not `current_epoch_challenger`" in prompt
     assert "when its `parent` is false" in prompt
-    assert "candidate/runtime-state/" in prompt
-    assert "adaptive `memory/`, `docs/`, `skills/`, and `tools/` seed" in prompt
+    assert "`candidate/`" in prompt
+    assert "All Candidate\ncontent can be edited" in prompt
     assert "python3 input/evolver/src/runtime_tools.py evolution-report" in prompt
     assert "scratch/evolution-report-draft.json" in prompt
     assert "never write `scratch/evolution-report.json` directly" in prompt

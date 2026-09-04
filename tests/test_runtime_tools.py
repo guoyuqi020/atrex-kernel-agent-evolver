@@ -16,28 +16,29 @@ LOSER = "agentrev_22222222222222222222222222222222"
 def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     workspace = tmp_path / "workspace"
     for path in (
-        "input/agents/agent-v0/source/prompts",
-        "input/agents/agent-v1/source/prompts",
-        "input/agents/agent-v2/source/prompts",
-        "candidate/source/prompts",
-        "candidate/runtime-state/skills",
-        "candidate/runtime-state/tools",
-        "scratch/.evolution-report/runtime-state-base/skills",
-        "scratch/.evolution-report/runtime-state-base/tools",
+        "input/agents/agent-v0/prompts",
+        "input/agents/agent-v1/prompts",
+        "input/agents/agent-v2/prompts",
+        "candidate/prompts",
+        "candidate/skills",
+        "candidate/tools",
+        "scratch",
     ):
         (workspace / path).mkdir(parents=True, exist_ok=True)
     for relative in (
-        "input/agents/agent-v0/source/prompts/episode.md",
-        "candidate/source/prompts/episode.md",
+        "input/agents/agent-v0/prompts/episode.md",
+        "candidate/prompts/episode.md",
     ):
         (workspace / relative).write_text("active\n")
-    (workspace / "input/agents/agent-v1/source/prompts/episode.md").write_text("historical\n")
-    (workspace / "input/agents/agent-v2/source/prompts/episode.md").write_text("loser\n")
+    (workspace / "input/agents/agent-v1/prompts/episode.md").write_text("historical\n")
+    (workspace / "input/agents/agent-v2/prompts/episode.md").write_text("loser\n")
     for prefix in (
-        "candidate/runtime-state",
-        "scratch/.evolution-report/runtime-state-base",
+        "candidate",
+        "input/agents/agent-v0",
+        "input/agents/agent-v1",
+        "input/agents/agent-v2",
     ):
-        for name in ("memory", "docs", "skills", "tools"):
+        for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
             directory = workspace / prefix / name
             directory.mkdir(exist_ok=True)
             (directory / "README.md").write_text(f"# {name}\n")
@@ -48,29 +49,112 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 "revision_id": ACTIVE,
                 "relationship": "active",
                 "parent": True,
-                "source_path": "input/agents/agent-v0/source",
+                "path": "input/agents/agent-v0",
+                "resources_path": "input/evidence/agent-v0/resources",
             },
             {
                 "revision_id": HISTORICAL,
                 "relationship": "lineage_history",
                 "parent": False,
-                "source_path": "input/agents/agent-v1/source",
+                "path": "input/agents/agent-v1",
+                "resources_path": "input/evidence/agent-v1/resources",
             },
             {
                 "revision_id": LOSER,
                 "relationship": "challenger",
                 "parent": False,
-                "source_path": "input/agents/agent-v2/source",
+                "path": "input/agents/agent-v2",
+                "resources_path": "input/evidence/agent-v2/resources",
             },
         ],
-        "candidate_source": "candidate/source",
-        "candidate_runtime_state": "candidate/runtime-state",
-        "runtime_state_base": "scratch/.evolution-report/runtime-state-base",
+        "candidate": "candidate",
         "report_path": "scratch/evolution-report.json",
         "max_report_bytes": 8192,
     }
     monkeypatch.setenv("EVOLUTION_REPORT_CONTEXT_JSON", json.dumps(context))
     return workspace
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "input/agents/agent-v1/skills",
+        "input/agents/agent-v1/skills/README.md",
+        "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/memory",
+    ],
+)
+def test_report_accepts_bundle_and_parent_trajectory_contributions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative: str,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    resources = (
+        workspace / "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/memory"
+    )
+    resources.mkdir(parents=True)
+    (resources / "lesson.md").write_text("useful learned content")
+    (workspace / "candidate/prompts/episode.md").write_text("revised")
+    draft = _draft(workspace, changed_paths=["prompts/episode.md"])
+    value = json.loads(draft.read_text())
+    value["contributing_paths"] = [relative]
+    draft.write_text(json.dumps(value))
+    assert evolution_report(workspace, draft)["status"] == "published"
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "input/agents/agent-v99",
+        "input/agents/agent-v1/missing",
+        "input/agents/agent-v1-evil",
+        "input/evidence/agent-v0/sessions",
+        "candidate/skills",
+        "/etc/passwd",
+        "input/agents/agent-v1/../agent-v0",
+        "input/agents//agent-v1",
+        "input/agents/agent-v1/",
+        "input/agents/agent-v1/linked",
+    ],
+)
+def test_report_rejects_invalid_contribution_and_allows_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative: str,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    (workspace / "input/agents/agent-v1/linked").symlink_to(workspace / "candidate/prompts")
+    (workspace / "candidate/prompts/episode.md").write_text("revised")
+    draft = _draft(workspace, changed_paths=["prompts/episode.md"])
+    value = json.loads(draft.read_text())
+    value["contributing_paths"] = [relative]
+    draft.write_text(json.dumps(value))
+    with pytest.raises(EvolutionReportIssue, match="contributing_paths"):
+        evolution_report(workspace, draft)
+    assert not (workspace / "scratch/evolution-report.json").exists()
+    value["contributing_paths"] = ["input/agents/agent-v0/memory"]
+    draft.write_text(json.dumps(value))
+    assert evolution_report(workspace, draft)["status"] == "published"
+
+
+def test_report_rejects_resources_of_an_unevaluated_challenger(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    context = json.loads(os.environ["EVOLUTION_REPORT_CONTEXT_JSON"])
+    context["visible_agents"][2]["relationship"] = "current_epoch_challenger"
+    monkeypatch.setenv("EVOLUTION_REPORT_CONTEXT_JSON", json.dumps(context))
+    resources = workspace / "input/evidence/agent-v2/resources"
+    resources.mkdir(parents=True)
+    (workspace / "candidate/prompts/episode.md").write_text("revised")
+    draft = _draft(workspace, changed_paths=["prompts/episode.md"])
+    value = json.loads(draft.read_text())
+    value["contributing_paths"] = ["input/evidence/agent-v2/resources"]
+    draft.write_text(json.dumps(value))
+    with pytest.raises(EvolutionReportIssue, match="eligible completed history"):
+        evolution_report(workspace, draft)
+    assert not (workspace / "scratch/evolution-report.json").exists()
 
 
 def _draft(workspace: Path, *, changed_paths: list[str]) -> Path:
@@ -83,7 +167,7 @@ def _draft(workspace: Path, *, changed_paths: list[str]) -> Path:
                 "hypothesis": "Use a narrower measured search policy.",
                 "expected_effect": "Reduce repeated unsupported experiments.",
                 "changed_paths": changed_paths,
-                "contributing_revision_ids": [],
+                "contributing_paths": [],
                 "unimplemented_capabilities": [],
             }
         )
@@ -107,7 +191,7 @@ def _typed_draft(
                 "hypothesis": "Revive a design whose Session evidence supports it.",
                 "expected_effect": "Recover the behavior its Attempt reports justify.",
                 "changed_paths": changed_paths,
-                "contributing_revision_ids": [],
+                "contributing_paths": [],
                 "unimplemented_capabilities": [],
             }
         )
@@ -191,7 +275,7 @@ def test_evolution_report_guides_source_diff_repair_and_publishes_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
-    (workspace / "candidate/source/prompts/episode.md").write_text("evolved\n")
+    (workspace / "candidate/prompts/episode.md").write_text("evolved\n")
     draft = _draft(workspace, changed_paths=[])
 
     with pytest.raises(EvolutionReportIssue) as raised:
@@ -200,8 +284,8 @@ def test_evolution_report_guides_source_diff_repair_and_publishes_once(
     assert raised.value.issues == [
         {
             "path": "changed_paths",
-            "code": "source_diff_mismatch",
-            "message": "changed_paths must equal the exact sorted Agent Source diff",
+            "code": "bundle_diff_mismatch",
+            "message": "changed_paths must equal the exact sorted Agent Bundle diff",
             "expected": ["prompts/episode.md"],
             "actual": [],
         }
@@ -213,8 +297,7 @@ def test_evolution_report_guides_source_diff_repair_and_publishes_once(
         "report": "scratch/evolution-report.json",
         "proposal_type": "evolved",
         "kernel_agent_revision_id": ACTIVE,
-        "source_changed_count": 1,
-        "runtime_state_changed": False,
+        "changed_count": 1,
     }
     assert json.loads((workspace / "scratch/evolution-report.json").read_text()) == json.loads(
         draft.read_text()
@@ -223,31 +306,34 @@ def test_evolution_report_guides_source_diff_repair_and_publishes_once(
         evolution_report(workspace, draft)
 
 
-@pytest.mark.parametrize("directory", ("memory", "docs", "skills", "tools"))
+@pytest.mark.parametrize(
+    "directory", ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
+)
 def test_evolution_report_accepts_state_only_revision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     directory: str,
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
-    (workspace / "candidate/runtime-state" / directory / "search.md").write_text(
-        "measured search\n"
+    (workspace / "candidate" / directory / "search.md").write_text("measured search\n")
+
+    receipt = evolution_report(
+        workspace, _draft(workspace, changed_paths=[f"{directory}/search.md"])
     )
 
-    receipt = evolution_report(workspace, _draft(workspace, changed_paths=[]))
-
-    assert receipt["source_changed_count"] == 0
-    assert receipt["runtime_state_changed"] is True
+    assert receipt["changed_count"] == 1
 
 
-@pytest.mark.parametrize("directory", ("memory", "docs", "skills", "tools"))
+@pytest.mark.parametrize(
+    "directory", ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
+)
 def test_report_allows_repairing_a_missing_state_index(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     directory: str,
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
-    readme = workspace / "candidate/runtime-state" / directory / "README.md"
+    readme = workspace / "candidate" / directory / "README.md"
     readme.unlink()
     draft = _draft(workspace, changed_paths=[])
     with pytest.raises(EvolutionReportIssue) as caught:
@@ -256,6 +342,7 @@ def test_report_allows_repairing_a_missing_state_index(
     assert "retry evolution-report" in caught.value.issues[0]["hint"]
     assert not (workspace / "scratch/evolution-report.json").exists()
     readme.write_text("repaired current index")
+    draft = _draft(workspace, changed_paths=[f"{directory}/README.md"])
     assert evolution_report(workspace, draft)["status"] == "published"
 
 

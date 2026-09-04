@@ -58,17 +58,13 @@ the available partial transcript with `state: interrupted`. The high-frequency C
 `system/thinking_tokens` estimate event is omitted and declared in
 `session.json.provider_event_filters`.
 
-The rendered Session context lists every authorized Agent repository, optimization summary, Session
-directory, and runtime-state directory. Evolver reads those immutable files directly. Writable
-`candidate/source/` mirrors Active Source. `candidate/runtime-state/{memory,docs,skills,tools}/` starts from the
-latest completed Epoch's winning branch and best-Kernel Trajectory, using its terminal State after
-the last Attempt in that Epoch. The next Epoch's Active Branch uses the same State seed. When no
-terminal checkpoint exists, Runtime falls back to that Trajectory's Epoch-start State, the revision
-seed, and the empty default.
-For `evolve_from_history`, Evolver replaces Source with the selected historical Source
-and may curate the common seed from visible historical Trajectories. Runtime validates the declared
-base and the Source/State Diff independently. Every new revision seals both components as one
-logical Agent Bundle.
+Session context lists complete read-only Agent Bundles and their evidence/resources paths.
+Writable `candidate/` directly contains implementation and all six adaptive directories.
+It starts from the Parent Bundle using the same resource seed as the next Active. Missing terminal
+State falls back to Epoch-start State, revision seed, then packaged defaults.
+For `evolve_from_history`, copy the selected complete historical Bundle into Candidate, then edit.
+Report every changed file relative to the Bundle root, including adaptive-directory modifications.
+Runtime validates and seals the complete Bundle and six-directory checkpoint.
 
 Maintain `scratch/evolution-report-draft.json`, then submit it with:
 

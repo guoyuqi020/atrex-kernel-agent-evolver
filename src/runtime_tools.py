@@ -16,6 +16,7 @@ from context import validate_adaptive_directories
 from report import (
     EVOLUTION_OUTPUT_FIELDS,
     EvolutionOutputContractError,
+    validate_contribution_sources,
     validate_evolution_output,
 )
 
@@ -70,13 +71,18 @@ def request_schema() -> dict[str, Any]:
                 "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1},
             },
-            "contributing_revision_ids": {
+            "contributing_paths": {
                 "type": "array",
                 "maxItems": 64,
                 "uniqueItems": True,
                 "items": {
                     "type": "string",
-                    "pattern": r"^agentrev_[0-9a-f]{32}$",
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "description": (
+                        "Canonical workspace-relative path under an eligible Agent Bundle "
+                        "or input/evidence/agent-vN/resources; files or directories are allowed."
+                    ),
                 },
             },
             "unimplemented_capabilities": {
@@ -108,9 +114,7 @@ def _context(workspace: Path) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != {
         "active_revision_id",
         "visible_agents",
-        "candidate_source",
-        "candidate_runtime_state",
-        "runtime_state_base",
+        "candidate",
         "report_path",
         "max_report_bytes",
     }:
@@ -124,7 +128,8 @@ def _context(workspace: Path) -> dict[str, Any]:
             "revision_id",
             "relationship",
             "parent",
-            "source_path",
+            "path",
+            "resources_path",
         }:
             raise ValueError(f"visible_agents[{index}] fields are invalid")
         revision_id = item.get("revision_id")
@@ -137,7 +142,8 @@ def _context(workspace: Path) -> dict[str, Any]:
             not in {"active", "challenger", "current_epoch_challenger", "lineage_history"}
         ):
             raise ValueError(f"visible_agents[{index}] identity is invalid")
-        _safe_workspace_path(workspace, item.get("source_path"), "visible Agent source_path")
+        _safe_workspace_path(workspace, item.get("path"), "visible Agent path")
+        _safe_workspace_path(workspace, item.get("resources_path"), "visible Agent resources_path")
         seen.add(revision_id)
     active = value.get("active_revision_id")
     if not isinstance(active, str) or active not in seen:
@@ -145,12 +151,7 @@ def _context(workspace: Path) -> dict[str, Any]:
     max_bytes = value.get("max_report_bytes")
     if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes <= 0:
         raise ValueError("Evolution report byte limit is invalid")
-    for field in (
-        "candidate_source",
-        "candidate_runtime_state",
-        "runtime_state_base",
-        "report_path",
-    ):
+    for field in ("candidate", "report_path"):
         _safe_workspace_path(workspace, value.get(field), field)
     return value
 
@@ -277,85 +278,75 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
     except EvolutionOutputContractError as error:
         raise EvolutionReportIssue(str(error), [_structural_issue(str(error))]) from error
 
+    try:
+        validate_contribution_sources(workspace, report["contributing_paths"], agents)
+    except ValueError as error:
+        raise EvolutionReportIssue(str(error), [_structural_issue(str(error))]) from error
+
     selected_id = str(report["kernel_agent_revision_id"])
     selected = visible[selected_id]
-    candidate_source = _safe_workspace_path(
-        workspace,
-        context["candidate_source"],
-        "candidate_source",
-    )
-    candidate_state = _safe_workspace_path(
-        workspace,
-        context["candidate_runtime_state"],
-        "candidate_runtime_state",
-    )
+    candidate_bundle = _safe_workspace_path(workspace, context["candidate"], "candidate")
     try:
-        validate_adaptive_directories(candidate_state, "Candidate runtime-state")
+        validate_adaptive_directories(candidate_bundle, "Candidate Bundle")
     except ValueError as error:
         raise EvolutionReportIssue(
             str(error),
             [
                 {
-                    "path": "candidate/runtime-state",
+                    "path": "candidate",
                     "code": "invalid_runtime_state",
                     "message": str(error),
-                    "hint": "Keep memory/, docs/, skills/, tools/ and a current README.md in each; "
+                    "hint": "Keep prompts/, memory/, knowledge/, skills/, tools/, hooks/ "
+                    "and a current README.md in each; "
                     "use only regular files/directories, repair the State, "
                     "then retry evolution-report.",
                 }
             ],
         ) from error
-    state_base = _safe_workspace_path(
+    active_bundle = _safe_workspace_path(
         workspace,
-        context["runtime_state_base"],
-        "runtime_state_base",
+        visible[active]["path"],
+        "active path",
     )
-    active_source = _safe_workspace_path(
+    bundle_base = _safe_workspace_path(
         workspace,
-        visible[active]["source_path"],
-        "active source_path",
-    )
-    source_base = _safe_workspace_path(
-        workspace,
-        selected["source_path"],
-        "selected source_path",
+        selected["path"],
+        "selected path",
     )
     proposal_type = str(report["proposal_type"])
-    actual_source_paths = _changed_paths(
-        active_source if proposal_type == "reuse" else source_base,
-        candidate_source,
+    actual_paths = _changed_paths(
+        active_bundle if proposal_type == "reuse" else bundle_base,
+        candidate_bundle,
     )
-    runtime_state_paths = _changed_paths(state_base, candidate_state)
-    reported_source_paths = report["changed_paths"]
-    assert isinstance(reported_source_paths, list)
+    reported_paths = report["changed_paths"]
+    assert isinstance(reported_paths, list)
 
     issues: list[dict[str, Any]] = []
-    if reported_source_paths != actual_source_paths:
+    if reported_paths != actual_paths:
         issues.append(
             {
                 "path": "changed_paths",
-                "code": "source_diff_mismatch",
-                "message": "changed_paths must equal the exact sorted Agent Source diff",
-                "expected": actual_source_paths,
-                "actual": reported_source_paths,
+                "code": "bundle_diff_mismatch",
+                "message": "changed_paths must equal the exact sorted Agent Bundle diff",
+                "expected": actual_paths,
+                "actual": reported_paths,
             }
         )
-    if proposal_type == "reuse" and (actual_source_paths or runtime_state_paths):
+    if proposal_type == "reuse" and actual_paths:
         issues.append(
             {
                 "path": "proposal_type",
                 "code": "reuse_candidate_modified",
-                "message": "reuse requires Candidate Source and Runtime State to remain unchanged",
-                "source_changed_paths": actual_source_paths,
-                "runtime_state_changed": bool(runtime_state_paths),
+                "message": "reuse requires Candidate Bundle to remain unchanged",
+                "changed_paths": actual_paths,
             }
         )
-    if proposal_type != "reuse" and not actual_source_paths and not runtime_state_paths:
+    if proposal_type != "reuse" and not actual_paths:
         issues.append(
             {
                 "path": "candidate",
                 "code": "no_changes",
-                "message": "A new Agent revision requires a Source or Runtime State change",
+                "message": "A new Agent revision requires a Bundle change",
             }
         )
     if issues:
@@ -379,8 +370,7 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
         "report": report_path.relative_to(workspace).as_posix(),
         "proposal_type": proposal_type,
         "kernel_agent_revision_id": selected_id,
-        "source_changed_count": len(actual_source_paths),
-        "runtime_state_changed": bool(runtime_state_paths),
+        "changed_count": len(actual_paths),
     }
 
 
@@ -407,8 +397,17 @@ def _error_response(error: BaseException) -> dict[str, Any]:
             },
             {
                 "instruction": (
-                    "changed_paths contains only exact sorted paths relative to candidate/source; "
-                    "never include Runtime State paths."
+                    "changed_paths contains only exact sorted paths relative to candidate; "
+                    "include changes in prompts/, memory/, knowledge/, skills/, tools/, and hooks/."
+                )
+            },
+            {
+                "instruction": (
+                    "contributing_paths lists existing files or directories actually incorporated "
+                    "from input/agents/agent-vN or input/evidence/agent-vN/resources. "
+                    "Parent Trajectory resources are allowed; unevaluated Challengers, links, "
+                    "path traversal, mere reading, and automatic inheritance are not. "
+                    "Use sorted unique paths, at most 64; reuse requires []."
                 )
             },
         ],

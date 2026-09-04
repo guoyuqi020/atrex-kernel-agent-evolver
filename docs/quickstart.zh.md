@@ -54,15 +54,11 @@ Adapter 实现和版本化 Prompt。
 Transcript，并标记为 `state: interrupted`。高频 Claude `system/thinking_tokens` 估算事件会被
 省略，并在 `session.json.provider_event_filters` 中声明。
 
-渲染后的 Session Context 会列出全部授权 Agent Repository、优化汇总、Session 目录和 Runtime State
-目录，Evolver 直接读取这些不可变文件。可写的 `candidate/source/` 初始镜像 Active Source；
-`candidate/runtime-state/{memory,docs,skills,tools}/` 初始取最近完成 Epoch 的获胜分支中、产出最佳 Kernel 的
-Trajectory 在该 Epoch 最后一个 Attempt 结束后的终态 State；下一 Epoch 的 Active Branch 使用完全
-相同的 State 种子。缺失终态检查点时，依次回退到该 Trajectory 的 Epoch 起始 State、Revision Seed
-和空默认值。
-选择 `evolve_from_history` 时，
-Evolver 用所选历史 Agent 的 Source 替换 Candidate Source，并可从可见历史 Trajectory 中整理公共
-种子；Runtime 独立验证 Base 和 Source/State 的真实 Diff，并把两个组件封存为一个逻辑 Agent Bundle。
+Session Context 列出完整只读 Agent Bundle 及对应 Evidence/Resources 路径。
+可写 `candidate/` 直接包含实现及六个自适应目录，初始是 Parent Bundle，资源种子与下一 Active 相同。
+缺少终态 State 时回退到 Epoch 起始 State、Revision Seed 和打包默认内容。
+从历史派生时先复制完整历史 Bundle 到 Candidate，再修改；Changed Paths 相对于 Bundle 根目录，
+包括六目录改动。Runtime 校验并封存完整 Bundle 与六目录 Checkpoint。
 
 持续维护 `scratch/evolution-report-draft.json`，然后调用：
 

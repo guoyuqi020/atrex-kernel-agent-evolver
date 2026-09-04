@@ -15,17 +15,18 @@ run-<uuid>/
 ├── input/
 │   ├── agents/                # 每个可见 Agent 版本，各一处
 │   │   └── agent-v<N>/
-│   │       ├── source/        # 精确版本化 Agent 仓库
-│   │       └── runtime-state/ # 各 Trajectory 的 memory/docs/memory/docs/skills/tools
+│   │       ├── src/ and configuration
+│   │       └── {prompts,memory,knowledge,skills,tools,hooks}/
 │   ├── evidence/              # 只读、已授权的运行 Evidence
 │   │   └── agent-v<N>/
+│   │       ├── resources/trajectories/trajectory-NNNNNNNN/
 │   │       ├── optimization-summary.json
 │   │       ├── sessions/      # 仅上一个已完成 Epoch 的双方分支
 │   │       └── reports/       # 仅上一个已完成 Epoch 的双方分支
 │   └── evolution-reports/     # 此前的 Agent 创建报告
 ├── candidate/                 # 可写 Agent Candidate
-│   ├── source/                # 完整版本化 Bundle
-│   └── runtime-state/         # 唯一一份公共 {memory,docs,skills,tools} 种子
+│   ├── src/ and configuration
+│   └── {prompts,memory,knowledge,skills,tools,hooks}/
 └── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
 ```
 
@@ -47,78 +48,54 @@ Archive 或超限都会被拒绝。部署后续可以固定另一个 Commit，�
 
 ## 3. 输入与输出
 
-入口只接受字段和路径映射完全匹配的 Evolution Manifest Schema 11。Manifest 必须标出恰好一个
-Parent，并提供非空、无重复的 `visible_agents` Catalog。Runtime 会加入已保留的 Lineage Agent
-历史，以及当前 Epoch 中此前已创建的 Challenger；每条 Catalog 条目提供其 Lineage 版本、Parent Link、
-创建者、`relationship`（`active`、`challenger`、`current_epoch_challenger` 或 `lineage_history`）以及
-适用时的 Challenger Ordinal。每个可见 Revision 只按版本落在一处：
-`input/agents/agent-vN/` 存放其封存 Source 与逐 Trajectory Runtime State，
-`input/evidence/agent-vN/` 存放 Runtime 对它的派生结论；任何目录名都不再编码 Epoch 角色。
-每个版本都有优化效果汇总；只有在最近一个已完成 Epoch 中参赛的全部分支还额外拥有 `sessions/` 与
-`reports/`，且都取自同一个 Epoch，因此可以直接对比。Parent 是带 `parent` 标记的那一项，也就是该
-Epoch 的获胜方。每份汇总都写明该 Revision 的 `branch` 与 `outcome`；其中 `selection_reason` 记录最后一次
-两两选择步骤，而不是多 Challenger 淘汰过程中的全部比较，因此不能把它当成每个失败 Revision 各自的
-失败原因。Conversation 与 Attempt Report 均按
-Trajectory 组织；Bootstrap 与更早 Epoch 的 Conversation 仍属于 Runtime 私有历史，当前 Epoch 的
-Challenger 因尚未运行任何 Attempt 而两者皆无。可用的历史 Agent
-创建 `EvolutionOutput` 投影成有序的 `input/evolution-reports/evo-N.json` Wrapper，其中关联 Source Base、
-产出 Agent 以及各自在本 Workspace 的 Source/Runtime State 路径；完整 Evolution Trace 保持私有。各
-Trajectory 持久积累的自适应 `memory/`、`docs/`、`skills/` 与 `tools/` 位于该版本源码旁边的
-`runtime-state/` 下，把精确源码、累计优化效果与运行时状态放在一起。这些内容是非版本化
-Lineage 状态，也是自适应 State 存储。根级 `skills/` 和 `tools/` 在版本化 Source 中
-无效。Evolver 可以直接整理 `candidate/runtime-state/`，也可以修改控制未来如何使用状态的 Source
-机制。Runtime 始终分别封存 Candidate Source 与 State，并把两者组合为同一个不可变 Agent Bundle；
-后续每条新 Trajectory 都从这个 Bundle 的 State 初始化。State 是否相对输入发生修改不影响封存。
-四目录分别保存搜索记忆、知识、技能流程和工具脚本，各自必须维护随内容变化同步更新的 README。
-Source 内的实现文档与自适应 Docs 分开存储。
-Catalog
-同时明确提供 Parent Link、创建者、关系类型以及适用时的
-Challenger Ordinal。
-每份优化效果汇总将该 Agent Revision 最近一次完成的 Epoch 与累计战绩分开。最近 Epoch 部分统计
-正确 Kernel、错误 Kernel 和未产出 Candidate Kernel 的 Attempt 数，并内嵌最佳正确 Kernel 的
-权威 Gateway 逐 Shape 投影；累计部分统计已完成 Epoch 的参赛、获胜和失败次数。
-Runtime 从匹配的不可变 Lineage Checkpoint 派生这份紧凑视图，不暴露 Agent-facing `epochs/` 目录，也不在
-Evolution Workspace 中重复保存详细历史。
-入口把环境路径绑定到
-Manifest，并拒绝 Link 与越界路径。Usage Report 目标是必需输入，但不接受 Token Budget。
+入口接受固定路径的 Evolution Manifest schema 11、唯一 Parent 和非空 `visible_agents` Catalog。
+条目包含 Lineage 版本、Revision ID、Parent、创建者、关系类型、完整 Bundle 的 `path`、汇总路径、
+可选 Session/Report 路径及 `resources_path`。关系为 `active`、`challenger`、
+`current_epoch_challenger` 和 `lineage_history`。`parent: true` 是上一个完成 Epoch 的获胜者，
+不一定是该 Epoch 的 Active 分支。
 
-`Parent` 只是一种角色，不是另一份仓库或目录。它就是带 `parent` 标记的那个可见 Agent，和其他每个版本
-一样只在 `input/agents/agent-vN/` 保存一次；Runtime 把其 Source，以及最近完成 Epoch 获胜分支中产出最佳
-Kernel 的 Trajectory 在该 Epoch 最后一个 Attempt 后的终态 State 复制到 Candidate；下一 Epoch 的
-Active Branch 使用相同 State 种子。缺失终态时依次回退到该 Trajectory 的 Epoch 起始 State、
-Revision Seed 和空默认值。对于
-`evolve_from_history`，Evolver 替换 Source，并可从可见历史
-Trajectory 中整理公共种子。终态输出只声明 `kernel_agent_revision_id`；Runtime 以该 Revision 的 Source
-作为提案参考并验证其身份，
-Runtime State 身份仍作为私有控制数据，并跨不可变 Source
-与初始 Active State 计算真实 Diff。每个新 Revision 都把两个组件封存为一个逻辑 Agent Bundle。不需要也不
-信任任何 Candidate 控制工具或旁路 Base 记录。
+每个 `input/agents/agent-vN/` 都是完整只读 Bundle。Parent 将实现与获胜最佳 Kernel Trajectory 的
+终态资源组合；缺失时回退到 Epoch 起始 State、Revision Seed 和打包默认内容。下一 Active 使用相同
+起始资源。其他可见 Bundle 使用各自 Revision Seed。Runtime 将完整 Parent 复制到可写 `candidate/`，
+直接包含实现与六个自适应目录，每个目录只有一份有效内容。
 
-Evidence 结构 Prompt Fragment 由 Runtime 源码模板生成，通过内存传入外层 Bundle 后拼入最终 Prompt。
+每个版本在 `input/evidence/agent-vN/` 下都有优化效果汇总；仅上一个完成 Epoch 的参赛者还暴露该
+Epoch 的 Conversation 与 Attempt Report，按 Trajectory 分组。汇总将最近 Epoch 的正确、错误、无
+Candidate Attempt 数及最佳正确 Kernel 的逐 Shape 权威 Gateway 结果，与累计参赛、胜、负次数分开。
+`selection_reason` 描述最后一次两两选择，不代表多 Challenger 淘汰过程的每一步。
+Bootstrap 与更早 Epoch 的 Conversation 保持私有。
 
-Coding Agent 输出统一格式的 `EvolutionOutput`。所有模式都使用 `kernel_agent_revision_id`、
-`changed_paths` 与 `contributing_revision_ids`；`changed_paths` 只报告相对于 Source 根目录的排序路径。
-复用要求空数组，仅修改 State 的新
-Revision 也可以报告空数组。它可以从 Active 派生新 Revision、原样复用
-一个可见历史 Revision，或从一个可见历史 Revision 派生新 Revision。创建新 Revision 的提案包含
-相对于所选 Source Base 的准确排序 Changed Paths；Runtime 私下计算 State 修改。Candidate 也可以融合
-多个可见 Agent 的内容；`contributing_revision_ids` 列出除 Source Base 以外所有被取用过 Source、Skill
-或 Tool 的 Revision，且只能是已完成的 Lineage 历史或 Active。这是来源记录而非祖先关系：Source Base
-与 Diff 目标仍是唯一那个声明的 Revision。每种
-模式都可以包含有界、结构化的
-`unimplemented_capabilities`，记录所需能力、预期 Kernel 优化收益以及本次无法实现的具体原因。
-Runtime 会把这些不可信建议保留在 Evolution Evidence 中，供后续 Evolver 查看；它们不会授予
-额外权限，也不参与胜负选择。Runtime 仍是权威方：它校验冻结可见范围，随后独立 Hash Base 与
-Candidate，校验真实修改集合和
-Bundle Policy，封存逐 Epoch 提案来源，再运行配置的
-Active/Challenger Pool 评估。Revision 父子关系仍是树；复用和晋升是参赛事件，不是祖先边。
+各 Trajectory 的补充学习资源位于
+`input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`，供 Evolver 比较和融合合格
+Agent 的 prompts、memory、knowledge、skills、tools、hooks。六目录必须维护随内容变化同步更新的
+README。Knowledge 不等于 Bundle 的工程 `docs/`；保存 Hooks 不等于启用 Hooks。
 
-Agent 持续维护 `scratch/evolution-report-draft.json`，并调用只读 Bundle 中固定的
-`python3 input/evolver/src/runtime_tools.py evolution-report --request
-scratch/evolution-report-draft.json`。调用失败不会发布内容，而是返回 `issues`、准确的
-`request_schema` 和有界 `recovery` 指令；Agent 可修改并重试。第一次成功调用会原子发布
-`scratch/evolution-report.json`，之后再次调用会被拒绝。工具检查真实 Source Diff 与私有初始 State
-快照；Coding Agent 退出后，外层 Bundle 和 Runtime 会再次独立校验。
+历史报告 `input/evolution-reports/evo-N.json` 用 `parent.path`、`generated_agent.path` 指向完整 Bundle；
+`report.contributing_paths` 保留原始 Session 相对路径，不保证当前资源仍等于历史快照。报告是 Agent 的设计意图，不代表提案获胜；
+完整 Evolution Trace 保持 Runtime 私有。
+
+七字段 `EvolutionOutput` 包含 `proposal_type`、`kernel_agent_revision_id`、`hypothesis`、
+`expected_effect`、`changed_paths`、`contributing_paths`、`unimplemented_capabilities`。
+
+- `evolved`：修改已准备好的 Parent Bundle。
+- `reuse`：选择合格历史版本原样复用，Candidate 不变，Changed Paths 为空。
+- `evolve_from_history`：先用所选完整历史 Bundle 的可写副本替换 Candidate，再修改；Runtime 校验 Base。
+- `changed_paths` 是相对于所选 Bundle 根目录的准确排序 Diff，包括六目录改动。新版本必须有真实变化。
+- 贡献来源是实际吸收的 Bundle/Resources 路径，包括 Parent 其他 Trajectory。Runtime 封存准确内容；
+  按可见范围与参赛资格校验，不按是否属于 Base 排除。
+- 未实现能力说明具体需求、预期收益及无法实现的原因，不授予权限或选择优势。
+
+持续维护 `scratch/evolution-report-draft.json`，通过
+`python3 input/evolver/src/runtime_tools.py evolution-report --request scratch/evolution-report-draft.json`
+提交。错误返回 `issues`、`request_schema` 和 `recovery`，不发布；首次成功原子生成
+`scratch/evolution-report.json`。Runtime 独立校验完整 Bundle Diff，导入完整 Bundle 和六目录
+Checkpoint。效果由下一 Epoch 评估，而非 Evolver 自测。Optimizer 的实现权限与继承规则不变。
+
+`contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
+`input/agents/agent-vN/` 和 `input/evidence/agent-vN/resources/`，包括 Parent 其他 Trajectory 的资源。
+仅阅读和自动继承 Parent 不算贡献。路径必须存在、无链接或越界，且属于合格已评估历史或 Parent，
+不能引用同 Epoch 尚未评估的 Challenger。`reuse` 要求 `[]`。Runtime 在 Evolution Trace 中保存归属
+和准确内容快照；该字段不改变 Bundle Base 或 Revision 祖先关系。
 
 ## 4. Token 与进程所有权
 

@@ -20,7 +20,7 @@ _REVISION_ID = re.compile(r"^agentrev_[0-9a-f]{32}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _TRAJECTORY_DIRECTORY = re.compile(r"^trajectory-([0-9]{8})$")
 _EVOLUTION_REPORT_FILE = re.compile(r"^evo-([1-9][0-9]*)\.json$")
-RUNTIME_STATE_DIRECTORIES = ("memory", "docs", "skills", "tools")
+RUNTIME_STATE_DIRECTORIES = ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
 
 
 @dataclass(frozen=True)
@@ -38,8 +38,8 @@ class VisibleAgent:
     sessions_root: Path | None
     reports_path: str | None
     reports_root: Path | None
-    runtime_state_path: str
-    runtime_state_root: Path
+    resources_path: str
+    resources_root: Path
     runtime_state_trajectory_ordinals: tuple[int, ...]
     parent: bool
     relationship: str
@@ -86,8 +86,10 @@ def _real_directory(path: Path, label: str) -> Path:
 
 def validate_adaptive_directories(root: Path, label: str) -> None:
     _real_directory(root, label)
-    if {child.name for child in root.iterdir()} != set(RUNTIME_STATE_DIRECTORIES):
-        raise ValueError(f"{label} must contain exactly memory/, docs/, skills/, tools/")
+    if not set(RUNTIME_STATE_DIRECTORIES) <= {child.name for child in root.iterdir()}:
+        raise ValueError(
+            f"{label} must contain prompts/, memory/, knowledge/, skills/, tools/, hooks/"
+        )
     for name in RUNTIME_STATE_DIRECTORIES:
         tree = _real_directory(root / name, f"{label} {name}")
         for entry in tree.rglob("*"):
@@ -261,7 +263,7 @@ class EvolutionContext:
                 "optimization_summary_path",
                 "sessions_path",
                 "reports_path",
-                "runtime_state_path",
+                "resources_path",
                 "parent",
                 "relationship",
                 "challenger_ordinal",
@@ -280,7 +282,7 @@ class EvolutionContext:
             sessions_relative = visible["sessions_path"]
             reports_relative = visible["reports_path"]
             runtime_state_relative = _text(
-                visible["runtime_state_path"],
+                visible["resources_path"],
                 "visible Agent runtime-state path",
             )
             parent = visible["parent"]
@@ -327,8 +329,8 @@ class EvolutionContext:
             ):
                 raise ValueError("visible Agent entry is invalid")
             competed = relationship in {"active", "challenger"}
-            expected_relative = f"input/agents/{version}/source"
-            expected_runtime_state = f"input/agents/{version}/runtime-state"
+            expected_relative = f"input/agents/{version}"
+            expected_runtime_state = f"input/evidence/{version}/resources"
             expected_summary = f"input/evidence/{version}/optimization-summary.json"
             expected_sessions = f"input/evidence/{version}/sessions" if competed else None
             expected_reports = f"input/evidence/{version}/reports" if competed else None
@@ -370,7 +372,7 @@ class EvolutionContext:
                     f"Visible Agent {revision_id} Attempt reports",
                 )
             )
-            runtime_state_root = _real_directory(
+            resources_root = _real_directory(
                 _expected_path(
                     workspace,
                     runtime_state_relative,
@@ -379,7 +381,7 @@ class EvolutionContext:
                 f"Visible Agent {revision_id} runtime state",
             )
             runtime_state_trajectory_ordinals = _validate_runtime_state(
-                runtime_state_root,
+                resources_root,
                 revision_id,
             )
             visible_agents.append(
@@ -396,7 +398,7 @@ class EvolutionContext:
                     expected_reports,
                     reports_root,
                     runtime_state_relative,
-                    runtime_state_root,
+                    resources_root,
                     runtime_state_trajectory_ordinals,
                     parent,
                     relationship,
@@ -424,24 +426,13 @@ class EvolutionContext:
             _expected_path(workspace, expected_paths["candidate"], "candidate path"),
             "Candidate repository",
         )
-        candidate_children = {child.name for child in candidate_root.iterdir()}
-        if candidate_children != {"source", "runtime-state"}:
-            raise ValueError("Candidate must contain exactly source/ and runtime-state/")
-        candidate_source = _real_directory(
-            candidate_root / "source",
-            "Candidate source",
-        )
-        candidate_runtime_state = _real_directory(
-            candidate_root / "runtime-state",
-            "Candidate runtime-state",
-        )
-        validate_adaptive_directories(candidate_runtime_state, "Candidate runtime-state")
+        validate_adaptive_directories(candidate_root, "Candidate Bundle")
         scratch_root = _real_directory(
             _expected_path(workspace, expected_paths["scratch"], "scratch path"),
             "Evolution scratch",
         )
         active_root = next(item.root for item in visible_agents if item.parent)
-        if active_root == candidate_source:
+        if active_root == candidate_root:
             raise ValueError("Active and Candidate repositories must be distinct")
         evidence_prompt = _strict_environment(env, "ATREX_EVIDENCE_PROMPT")
         if len(evidence_prompt.encode("utf-8")) > MAX_EVIDENCE_PROMPT_BYTES:

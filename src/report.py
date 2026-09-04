@@ -23,7 +23,7 @@ EVOLUTION_OUTPUT_FIELDS = frozenset(
         "hypothesis",
         "expected_effect",
         "changed_paths",
-        "contributing_revision_ids",
+        "contributing_paths",
         "unimplemented_capabilities",
     }
 )
@@ -51,7 +51,7 @@ def _changed_paths(value: object) -> list[str]:
             raise ValueError("changed_paths entries must be strings")
         relative = PurePosixPath(item)
         if relative.is_absolute() or relative.as_posix() == "." or ".." in relative.parts:
-            raise ValueError("changed_paths contains an unsafe Source-root-relative path")
+            raise ValueError("changed_paths contains an unsafe Bundle-root-relative path")
         normalized.append(relative.as_posix())
     if len(set(normalized)) != len(normalized):
         raise ValueError("changed_paths cannot contain duplicates")
@@ -60,38 +60,77 @@ def _changed_paths(value: object) -> list[str]:
     return normalized
 
 
-def _contributing_revision_ids(
-    value: object,
-    *,
-    source_reference: str,
-    active_revision_id: str,
-    visible_revision_ids: frozenset[str],
-    historical_revision_ids: frozenset[str],
-) -> list[str]:
+def _contributing_paths(value: object) -> list[str]:
     if not isinstance(value, list) or len(value) > 64:
-        raise ValueError("contributing_revision_ids must be an array with at most 64 entries")
-    creditable = historical_revision_ids | {active_revision_id}
-    normalized: list[str] = []
+        raise ValueError("contributing_paths must be an array with at most 64 paths")
+    paths: list[str] = []
     for index, item in enumerate(value):
-        revision = _revision(
-            item,
-            f"contributing_revision_ids[{index}]",
-            visible_revision_ids,
+        label = f"contributing_paths[{index}]"
+        if not isinstance(item, str) or not item or len(item) > 1000:
+            raise ValueError(f"{label} must be a nonempty path of at most 1000 characters")
+        relative = PurePosixPath(item)
+        parts = relative.parts
+        if (
+            relative.as_posix() != item
+            or ".." in parts
+            or "\\" in item
+            or "\x00" in item
+            or len(parts) < 3
+            or parts[0] != "input"
+            or parts[1] not in {"agents", "evidence"}
+            or not parts[2].startswith("agent-v")
+            or not parts[2][7:].isdigit()
+            or (parts[1] == "evidence" and (len(parts) < 4 or parts[3] != "resources"))
+        ):
+            raise ValueError(
+                f"{label} must be canonical and under input/agents/agent-vN "
+                "or input/evidence/agent-vN/resources"
+            )
+        paths.append(item)
+    if paths != sorted(set(paths)):
+        raise ValueError("contributing_paths must be sorted and cannot contain duplicates")
+    return paths
+
+
+def validate_contribution_sources(
+    workspace: Path,
+    paths: list[str],
+    visible_agents: list[dict[str, Any]],
+) -> None:
+    """Validate actual referenced files independently of the claimed base."""
+    for index, relative in enumerate(paths):
+        label = f"contributing_paths[{index}]"
+        path = PurePosixPath(relative)
+        owner = next(
+            (
+                item
+                for item in visible_agents
+                if any(
+                    path.is_relative_to(PurePosixPath(str(item[key])))
+                    for key in ("path", "resources_path")
+                )
+            ),
+            None,
         )
-        if revision == source_reference:
+        if owner is None or owner["relationship"] == "current_epoch_challenger":
             raise ValueError(
-                f"contributing_revision_ids[{index}] repeats the selected Source base"
+                f"{label} must reference eligible completed history or Parent resources"
             )
-        if revision not in creditable:
+        current = workspace
+        try:
+            for part in path.parts:
+                current = current / part
+                mode = current.lstat().st_mode
+                if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                    raise ValueError(f"{label} cannot traverse links or special files")
+            for child in current.rglob("*") if current.is_dir() else ():
+                mode = child.lstat().st_mode
+                if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                    raise ValueError(f"{label} contains a link or special file")
+        except OSError as error:
             raise ValueError(
-                f"contributing_revision_ids[{index}] must name completed Lineage history"
-            )
-        normalized.append(revision)
-    if len(set(normalized)) != len(normalized):
-        raise ValueError("contributing_revision_ids cannot contain duplicates")
-    if normalized != sorted(normalized):
-        raise ValueError("contributing_revision_ids must be sorted")
-    return normalized
+                f"{label} does not exist or is not readable; use a visible path"
+            ) from error
 
 
 def _unimplemented_capabilities(value: object) -> list[dict[str, str]]:
@@ -156,13 +195,7 @@ def _validated_output(
         visible_revision_ids,
     )
     changed_paths = _changed_paths(value["changed_paths"])
-    contributing = _contributing_revision_ids(
-        value["contributing_revision_ids"],
-        source_reference=source_reference,
-        active_revision_id=active_revision_id,
-        visible_revision_ids=visible_revision_ids,
-        historical_revision_ids=historical_revision_ids,
-    )
+    contributing = _contributing_paths(value["contributing_paths"])
     if proposal_type == "reuse":
         if source_reference == active_revision_id:
             raise ValueError("reuse cannot select the current Active revision")
@@ -171,7 +204,7 @@ def _validated_output(
         if changed_paths:
             raise ValueError("reuse requires changed_paths to be empty")
         if contributing:
-            raise ValueError("reuse requires contributing_revision_ids to be empty")
+            raise ValueError("reuse requires contributing_paths to be empty")
     elif proposal_type in {"evolved", "evolve_from_history"}:
         if proposal_type == "evolved" and source_reference != active_revision_id:
             raise ValueError("evolved must use the current Active Source revision")

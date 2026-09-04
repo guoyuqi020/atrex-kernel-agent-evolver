@@ -14,7 +14,11 @@ from typing import Any
 import backends
 from config import EvolverConfig
 from context import EvolutionContext
-from report import EvolutionOutputContractError, validate_evolution_output
+from report import (
+    EvolutionOutputContractError,
+    validate_contribution_sources,
+    validate_evolution_output,
+)
 from session_transcript import (
     FILTERED_PROVIDER_EVENTS,
     encode_records,
@@ -81,21 +85,18 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
                 "relationship": item.relationship,
                 "challenger_ordinal": item.challenger_ordinal,
                 "parent": item.parent,
-                "source_parent_revision_id": item.parent_revision_id,
-                "source_path": item.path,
+                "parent_revision_id": item.parent_revision_id,
+                "path": item.path,
                 "optimization_summary_path": item.optimization_summary_path,
                 "sessions_path": item.sessions_path,
                 "reports_path": item.reports_path,
-                "runtime_state_path": item.runtime_state_path,
+                "resources_path": item.resources_path,
             }
             for item in context.visible_agents
         ],
         "evidence": "input/evidence",
         "evolution_reports": "input/evolution-reports",
-        "candidate": {
-            "source": "candidate/source",
-            "runtime_state": "candidate/runtime-state",
-        },
+        "candidate": "candidate",
         "evolution_report": {
             "draft": "scratch/evolution-report-draft.json",
             "tool": (
@@ -120,15 +121,6 @@ def _prepare_evolution_report_tool(
     config: EvolverConfig,
 ) -> tuple[tuple[str, str], ...]:
     """Freeze the initial Candidate State and pass only safe report-validation context."""
-    support_root = context.scratch_root / ".evolution-report"
-    state_base = support_root / "runtime-state-base"
-    if support_root.exists() or support_root.is_symlink():
-        raise ValueError("Evolution report support path already exists")
-    support_root.mkdir(mode=0o700)
-    shutil.copytree(context.candidate_root / "runtime-state", state_base)
-    for path in sorted(state_base.rglob("*"), reverse=True):
-        path.chmod(0o500 if path.is_dir() else 0o400)
-    state_base.chmod(0o500)
     value = {
         "active_revision_id": context.parent_revision_id,
         "visible_agents": [
@@ -136,13 +128,12 @@ def _prepare_evolution_report_tool(
                 "revision_id": item.revision_id,
                 "relationship": item.relationship,
                 "parent": item.parent,
-                "source_path": item.path,
+                "path": item.path,
+                "resources_path": item.resources_path,
             }
             for item in context.visible_agents
         ],
-        "candidate_source": "candidate/source",
-        "candidate_runtime_state": "candidate/runtime-state",
-        "runtime_state_base": "scratch/.evolution-report/runtime-state-base",
+        "candidate": "candidate",
         "report_path": "scratch/evolution-report.json",
         "max_report_bytes": config.max_output_manifest_bytes,
     }
@@ -523,7 +514,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             return result.exit_status
         if not result.raw_provider_capture_complete:
             return 126
-        validate_evolution_output(
+        report = validate_evolution_output(
             context.output_path,
             active_revision_id=context.parent_revision_id,
             visible_revision_ids=frozenset(item.revision_id for item in context.visible_agents),
@@ -533,6 +524,18 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 if not item.parent and item.relationship != "current_epoch_challenger"
             ),
             max_bytes=config.max_output_manifest_bytes,
+        )
+        validate_contribution_sources(
+            context.workspace,
+            report["contributing_paths"],
+            [
+                {
+                    "path": item.path,
+                    "resources_path": item.resources_path,
+                    "relationship": item.relationship,
+                }
+                for item in context.visible_agents
+            ],
         )
         return 0
     except BaseException as error:

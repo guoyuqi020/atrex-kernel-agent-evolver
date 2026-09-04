@@ -17,19 +17,19 @@ EVIDENCE_PROMPT = "# Evidence input\n\nInjected by the trusted controller.\n"
 def _environment(tmp_path: Path) -> dict[str, str]:
     workspace = tmp_path / "run"
     for relative in (
-        "input/agents/agent-v0/source",
-        "input/agents/agent-v0/runtime-state/trajectories",
+        "input/agents/agent-v0",
+        "input/evidence/agent-v0/resources/trajectories",
         "input/evidence/agent-v0/sessions",
         "input/evidence/agent-v0/reports",
         "input/evolution-reports",
-        "candidate/source",
-        "candidate/runtime-state/skills",
-        "candidate/runtime-state/tools",
+        "candidate",
+        "candidate/skills",
+        "candidate/tools",
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    for name in ("memory", "docs", "skills", "tools"):
-        directory = workspace / "candidate/runtime-state" / name
+    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+        directory = workspace / "candidate" / name
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")
     (workspace / "input/evidence/agent-v0/optimization-summary.json").write_text("{}")
@@ -45,11 +45,11 @@ def _environment(tmp_path: Path) -> dict[str, str]:
                 "revision_id": REVISION,
                 "version": "agent-v0",
                 "optimizer_digest": DIGEST,
-                "path": "input/agents/agent-v0/source",
+                "path": "input/agents/agent-v0",
                 "optimization_summary_path": "input/evidence/agent-v0/optimization-summary.json",
                 "sessions_path": "input/evidence/agent-v0/sessions",
                 "reports_path": "input/evidence/agent-v0/reports",
-                "runtime_state_path": "input/agents/agent-v0/runtime-state",
+                "resources_path": "input/evidence/agent-v0/resources",
                 "parent": True,
                 "relationship": "active",
                 "challenger_ordinal": None,
@@ -82,7 +82,7 @@ def test_context_loads_exact_runtime_protocol(tmp_path: Path) -> None:
     assert context.dsl == "triton"
     assert context.evolution_number == 1
     assert context.candidate_root.name == "candidate"
-    assert context.visible_agents[0].runtime_state_path == ("input/agents/agent-v0/runtime-state")
+    assert context.visible_agents[0].resources_path == ("input/evidence/agent-v0/resources")
     assert context.visible_agents[0].runtime_state_trajectory_ordinals == ()
 
 
@@ -125,11 +125,11 @@ def _add_version(
     """Add one visible Agent version to the workspace and manifest."""
     workspace = Path(environment["ATREX_EVOLUTION_WORKSPACE"])
     for relative in (
-        f"input/agents/{version}/source",
-        f"input/agents/{version}/runtime-state/trajectories",
+        f"input/agents/{version}",
+        f"input/evidence/{version}/resources/trajectories",
     ):
         (workspace / relative).mkdir(parents=True)
-    (workspace / f"input/evidence/{version}").mkdir(parents=True)
+    (workspace / f"input/evidence/{version}").mkdir(parents=True, exist_ok=True)
     (workspace / f"input/evidence/{version}/optimization-summary.json").write_text("{}")
     if competed:
         (workspace / f"input/evidence/{version}/sessions").mkdir()
@@ -140,11 +140,11 @@ def _add_version(
             "revision_id": RIVAL,
             "version": version,
             "optimizer_digest": DIGEST,
-            "path": f"input/agents/{version}/source",
+            "path": f"input/agents/{version}",
             "optimization_summary_path": f"input/evidence/{version}/optimization-summary.json",
             "sessions_path": f"input/evidence/{version}/sessions" if competed else None,
             "reports_path": f"input/evidence/{version}/reports" if competed else None,
-            "runtime_state_path": f"input/agents/{version}/runtime-state",
+            "resources_path": f"input/evidence/{version}/resources",
             "parent": parent,
             "relationship": relationship,
             "challenger_ordinal": challenger_ordinal,
@@ -176,7 +176,7 @@ def test_context_accepts_the_last_completed_epoch_losing_branch(tmp_path: Path) 
     assert loser.challenger_ordinal == 1
     assert loser.parent is False
     assert loser.version == "agent-v1"
-    assert loser.path == "input/agents/agent-v1/source"
+    assert loser.path == "input/agents/agent-v1"
     assert loser.sessions_path == "input/evidence/agent-v1/sessions"
     assert loser.reports_path == "input/evidence/agent-v1/reports"
     assert loser.sessions_root is not None
@@ -235,7 +235,7 @@ def test_context_accepts_a_current_epoch_challenger_without_sessions(tmp_path: P
     assert fresh.reports_path is None
     assert fresh.sessions_root is None
     assert fresh.reports_root is None
-    assert fresh.path == "input/agents/agent-v1/source"
+    assert fresh.path == "input/agents/agent-v1"
 
 
 def test_context_rejects_the_previous_input_schema(tmp_path: Path) -> None:

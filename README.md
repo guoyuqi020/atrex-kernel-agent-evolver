@@ -18,7 +18,7 @@ One invocation:
    Agent source and may synthesize one common state seed from visible historical state;
 4. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
 5. selects `evolved`, `reuse`, or `evolve_from_history`, permitting changes only in writable
-   `candidate/source/` and `candidate/runtime-state/` when a new revision is proposed;
+   `candidate/` when a new revision is proposed;
 6. emits an unredacted Session Artifact containing the rendered Prompt, retained Provider
    stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; the
    high-frequency Claude `system/thinking_tokens` estimate event is intentionally omitted; and
@@ -41,19 +41,11 @@ Claude uses a fresh session ID with native persistence enabled; it never resumes
 
 The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged.
 
-The Coding Agent has full design authority over both Candidate components. It may add, replace,
-reorganize, or delete versioned Optimizer content under `candidate/source/`, and it may curate the
-single Memory/Docs/Skills/Tools checkpoint under `candidate/runtime-state/`. Runtime pairs the complete Source
-and State as one logical Bundle and copies that State into every new Trajectory. Top-level
-`skills/` and `tools/` remain
-invalid in the versioned source. It may replace the
-existing design wholesale when that is the best evidence-backed way to improve Kernel-optimization
-effectiveness or efficiency. The resulting repository must still be a valid Optimizer Bundle. It
-cannot change this Evolver, Runtime, or deployment policy because those files are absent or read-only.
-
-The Evolution report may also list structured `unimplemented_capabilities`: useful Agent
-capabilities, their expected Kernel-optimization benefit, and why the Evolver could not implement
-them in the Candidate. These entries are advisory and grant no additional authority.
+The Coding Agent may modify any Agent-owned content in the unified `candidate/` Bundle, including
+implementation, configuration, prompts, memory, knowledge, skills, tools, and hooks. Each adaptive
+directory has one effective copy and a maintained README index. Runtime seals the complete Bundle
+and its adaptive checkpoint for subsequent optimization. Input Bundles and per-Trajectory resources
+are read-only evidence. Evolver, Runtime, and deployment policies are outside the Candidate.
 
 ## Repository contract
 

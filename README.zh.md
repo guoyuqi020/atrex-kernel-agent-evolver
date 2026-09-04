@@ -17,7 +17,7 @@ Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、
    公共 Candidate 状态种子；
 4. 使用仓库内固定 Prompt 启动一次全新的非交互 Coding Agent；
 5. 从 `evolved`、`reuse`、`evolve_from_history` 中选择一种；需要创建新 Revision 时，只允许修改
-   `candidate/source/` 与 `candidate/runtime-state/`；
+   `candidate/`；
 6. 输出未脱敏 Session Artifact，其中包含最终渲染 Prompt、保留的 Provider
    stdout/stderr、标准化 Usage 索引和严格 Provider Token Report；高频 Claude
    `system/thinking_tokens` 估算事件会被有意省略；
@@ -36,13 +36,10 @@ Claude 使用全新 Session ID 并启用原生持久化，不恢复旧上下文�
 
 封存后的 `conversation.jsonl` 是阅读视图：Claude 优先使用原生内容，省去已被完整覆盖的 stdout 消息副本，保留不同的 thinking/text/tool 内容块、未被覆盖的 stdout 内容、诊断、压缩边界和终态结果。重复的初始 Prompt，以及原生队列、标题、文件历史等内部管理事件只从阅读视图中省去。封存前的实时视图仍跟随 stdout。原始 Provider 文件及规范化 usage 索引不变。
 
-Coding Agent 对 Candidate 的两个组件都拥有设计权限：可以在 `candidate/source/` 中增加、替换、
-重组或删除版本化 Optimizer 内容，也可以直接整理 `candidate/runtime-state/` 中唯一一份 Memory/Docs/Skills/Tools
-Checkpoint。Runtime 将完整 Source 与 State 组成逻辑 Bundle，并把该 State 复制给所有新 Trajectory。
-版本化 Source 根级仍禁止 `skills/` 与 `tools/`。
-当 Evidence 支持时，它可以整体替换现有设计，以提高 Agent 做 Kernel
-优化的有效性或效率；最终仓库仍必须是有效的 Optimizer Bundle。Evolver、Runtime 与部署策略
-不在 Candidate 内，或者只读，因此不能被它修改。
+Coding Agent 可以修改统一 `candidate/` Bundle 中任意 Agent 内容，包括实现、配置及
+prompts、memory、knowledge、skills、tools、hooks。每个自适应目录只有一份有效内容，并维护 README 索引。
+Runtime 封存完整 Bundle 和自适应 Checkpoint，供后续优化使用。输入 Bundle 与逐 Trajectory 资源只读；
+Evolver、Runtime 和部署策略不属于 Candidate，不能修改。
 
 Evolution Report 还可以列出结构化的 `unimplemented_capabilities`：说明有价值但本次无法实现的
 Agent 能力、预期的 Kernel 优化收益，以及无法实现的具体原因。这些内容只是建议，不会授予额外权限。

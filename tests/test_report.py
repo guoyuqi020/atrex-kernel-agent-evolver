@@ -33,7 +33,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
                 "hypothesis": "Tighten the search policy.",
                 "expected_effect": "Fewer repeated unsuccessful changes.",
                 "changed_paths": ["src/workflow.py", "prompts/episode.md"],
-                "contributing_revision_ids": [],
+                "contributing_paths": [],
                 "unimplemented_capabilities": [],
             }
         )
@@ -51,7 +51,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Tighten the search policy.",
             "expected_effect": "Fewer repeated unsuccessful changes.",
             "changed_paths": ["prompts/episode.md", "src/workflow.py"],
-            "contributing_revision_ids": [],
+            "contributing_paths": [],
             "unimplemented_capabilities": [
                 {
                     "capability": "Automatic profiler-guided tool synthesis.",
@@ -66,7 +66,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Curate only the reusable Runtime State seed.",
             "expected_effect": "Start the next Epoch with a better reusable procedure.",
             "changed_paths": [],
-            "contributing_revision_ids": [],
+            "contributing_paths": [],
             "unimplemented_capabilities": [],
         },
         {
@@ -75,7 +75,7 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Retry a previously strong design.",
             "expected_effect": "Recover its prior search behavior.",
             "changed_paths": [],
-            "contributing_revision_ids": [],
+            "contributing_paths": [],
             "unimplemented_capabilities": [],
         },
         {
@@ -84,14 +84,12 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "hypothesis": "Repair the historical design's one weak step.",
             "expected_effect": "Retain its strengths with fewer repeated trials.",
             "changed_paths": ["prompts/episode.md"],
-            "contributing_revision_ids": [],
+            "contributing_paths": [],
             "unimplemented_capabilities": [],
         },
     ],
 )
-def test_output_accepts_all_strict_modes(
-    tmp_path: Path, value: dict[str, object]
-) -> None:
+def test_output_accepts_all_strict_modes(tmp_path: Path, value: dict[str, object]) -> None:
     path = tmp_path / "output.json"
     path.write_text(json.dumps(value))
     assert _validate(path) == value
@@ -104,14 +102,14 @@ def _fusion_draft(contributing: list[str]) -> dict[str, object]:
         "hypothesis": "Combine the historical recovery step with the current search policy.",
         "expected_effect": "Fewer repeated dead ends without losing the current convergence.",
         "changed_paths": ["prompts/episode.md"],
-        "contributing_revision_ids": contributing,
+        "contributing_paths": contributing,
         "unimplemented_capabilities": [],
     }
 
 
 def test_output_accepts_a_credited_historical_contributor(tmp_path: Path) -> None:
     path = tmp_path / "output.json"
-    value = _fusion_draft([HISTORICAL])
+    value = _fusion_draft(["input/agents/agent-v1"])
     path.write_text(json.dumps(value))
 
     assert _validate(path) == value
@@ -119,26 +117,31 @@ def test_output_accepts_a_credited_historical_contributor(tmp_path: Path) -> Non
 
 def test_output_rejects_a_contributor_outside_frozen_visibility(tmp_path: Path) -> None:
     path = tmp_path / "output.json"
-    path.write_text(json.dumps(_fusion_draft(["agentrev_" + "2" * 32])))
+    path.write_text(json.dumps(_fusion_draft(["input/evidence/agent-v2/sessions"])))
 
-    with pytest.raises(ValueError, match=r"contributing_revision_ids\[0\] is outside the frozen"):
+    with pytest.raises(ValueError, match=r"contributing_paths\[0\] must be canonical"):
         _validate(path)
 
 
-def test_output_rejects_a_contributor_repeating_the_source_base(tmp_path: Path) -> None:
+def test_output_accepts_parent_resource_contributions(tmp_path: Path) -> None:
     path = tmp_path / "output.json"
-    path.write_text(json.dumps(_fusion_draft([ACTIVE])))
+    path.write_text(
+        json.dumps(
+            _fusion_draft(
+                ["input/evidence/agent-v0/resources/trajectories/trajectory-00000001/memory"]
+            )
+        )
+    )
 
-    with pytest.raises(ValueError, match="repeats the selected Source base"):
-        _validate(path)
+    assert _validate(path)["contributing_paths"]
 
 
 def test_output_requires_sorted_contributors(tmp_path: Path) -> None:
     other = "agentrev_" + "3" * 32
     path = tmp_path / "output.json"
-    path.write_text(json.dumps(_fusion_draft([other, HISTORICAL])))
+    path.write_text(json.dumps(_fusion_draft(["input/agents/agent-v3", "input/agents/agent-v1"])))
 
-    with pytest.raises(ValueError, match="contributing_revision_ids must be sorted"):
+    with pytest.raises(ValueError, match="contributing_paths must be sorted"):
         validate_evolution_output(
             path,
             active_revision_id=ACTIVE,
@@ -153,11 +156,11 @@ def test_output_rejects_contributors_under_reuse(tmp_path: Path) -> None:
     value["proposal_type"] = "reuse"
     value["kernel_agent_revision_id"] = HISTORICAL
     value["changed_paths"] = []
-    value["contributing_revision_ids"] = [ACTIVE]
+    value["contributing_paths"] = ["input/agents/agent-v0"]
     path = tmp_path / "output.json"
     path.write_text(json.dumps(value))
 
-    with pytest.raises(ValueError, match="reuse requires contributing_revision_ids to be empty"):
+    with pytest.raises(ValueError, match="reuse requires contributing_paths to be empty"):
         _validate(path)
 
 
@@ -171,7 +174,7 @@ def test_output_rejects_revision_outside_frozen_visibility(tmp_path: Path) -> No
                 "hypothesis": "Unknown Agent.",
                 "expected_effect": "None.",
                 "changed_paths": [],
-                "contributing_revision_ids": [],
+                "contributing_paths": [],
                 "unimplemented_capabilities": [],
             }
         )
@@ -190,7 +193,7 @@ def test_output_rejects_malformed_unimplemented_capability(tmp_path: Path) -> No
                 "hypothesis": "Retry a previously strong design.",
                 "expected_effect": "Recover its prior search behavior.",
                 "changed_paths": [],
-                "contributing_revision_ids": [],
+                "contributing_paths": [],
                 "unimplemented_capabilities": [
                     {
                         "capability": "Profiler-guided search.",
@@ -215,7 +218,7 @@ def test_contract_violations_name_the_offending_field(tmp_path: Path) -> None:
                 "hypothesis": "Bundle reusable skills into the sealed repository.",
                 "expected_effect": "Spend less budget rebuilding apparatus.",
                 "changed_paths": ["prompts/episode.md"],
-                "contributing_revision_ids": [],
+                "contributing_paths": [],
                 "unimplemented_capabilities": [
                     "Cross-attempt persistence: no handoff mechanism exists by design.",
                 ],
