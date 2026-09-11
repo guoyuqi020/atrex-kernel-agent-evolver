@@ -40,6 +40,8 @@ Coding Agent 可以修改统一 `candidate/` Bundle 中任意 Agent 内容，包
 prompts、insights、skills、tools。每个自适应目录只有一份有效内容，并维护 README 索引。
 Runtime 封存完整 Bundle 和自适应 Checkpoint，供后续优化使用。输入 Bundle 与逐 Trajectory 资源只读；
 Evolver、Runtime 和部署策略不属于 Candidate，不能修改。
+Optimizer Session 只能修改 Tools；Evolver 根据已完成 Conversation、Report 与权威结果整理 Prompts、
+Insights 和 Skills。成熟、可重复的 Tool 可以沉淀为 Claude Skill，一次性或失败的 Helper 不应被提升。
 
 Evolution Report 还可以列出结构化的 `unimplemented_capabilities`：说明有价值但本次无法实现的
 Agent 能力、预期的 Kernel 优化收益，以及无法实现的具体原因。这些内容只是建议，不会授予额外权限。

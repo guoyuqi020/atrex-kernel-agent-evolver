@@ -69,8 +69,9 @@ Bootstrap 与更早 Epoch 的 Conversation 保持私有。
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`，供 Evolver 比较和融合合格
 Agent 的 prompts、insights、skills、tools。四目录必须维护随内容变化同步更新的 README。
 Insights 保存带适用范围、由 Evidence 推导的决策指导；静态参考资料放在 Skill references 中。
-Runtime 在下一次 Claude/Codex Optimizer Session 启动前，把 Skill 目录安装到该 Session 的私有
-CLI Home。
+Optimizer 只能修改 Tools。只有真实 Session 使用和结果表明某个 Tool 已形成可复用流程时，Evolver
+才把它沉淀为 `skills/<name>/SKILL.md`，同时消除冗余副本并更新两个索引。Runtime 在下一次 Claude
+Optimizer Session 启动前，把 Skill 目录安装到该 Session 的私有 CLI Home。
 
 历史报告 `input/evolution-reports/evo-N.json` 用 `parent.path`、`generated_agent.path` 指向完整 Bundle；
 `report.contributing_paths` 保留原始 Session 相对路径，不保证当前资源仍等于历史快照。报告是 Agent 的设计意图，不代表提案获胜；

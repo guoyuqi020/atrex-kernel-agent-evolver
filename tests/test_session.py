@@ -496,6 +496,11 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "when its `parent` is false" in prompt
     assert "`candidate/`" in prompt
     assert "All Candidate content can be edited" in prompt
+    assert "only `tools/` is writable" in prompt
+    assert "Curate Skills from actual evidence" in prompt
+    assert "`skills/<name>/SKILL.md`" in prompt
+    assert "one-off probes" in prompt
+    assert "Runtime installs\nvalid Skills into the next Claude Optimizer" in prompt
     assert "python3 input/evolver/src/runtime_tools.py evolution-report" in prompt
     assert "scratch/evolution-report-draft.json" in prompt
     assert "never write `scratch/evolution-report.json` directly" in prompt

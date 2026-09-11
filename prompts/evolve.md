@@ -6,9 +6,9 @@ do not implement a Kernel in this Evolution Session. `evolution_number` identifi
 numbered Evolution in this Lineage.
 
 The writable `candidate/` is one complete Agent Bundle: implementation and configuration alongside
-`prompts/`, `insights/`, `skills/`, and `tools/`. All Candidate content can be edited. The four
-reusable directories are also writable during Optimizer sessions;
-implementation code remains read-only there.
+`prompts/`, `insights/`, `skills/`, and `tools/`. All Candidate content can be edited here. During
+Optimizer and Bootstrap sessions, only `tools/` is writable; Prompts, Insights, Skills, and
+implementation code are read-only versioned Agent content.
 
 Runtime evaluates the Candidate in the next Epoch. Do not measure Agent effectiveness here; run only
 bounded mechanical checks needed to leave a valid Bundle.
@@ -125,9 +125,17 @@ paths and update the index. Use Insights only for scoped, evidence-derived concl
 later search decision, Skills for procedures, and Tools for scripts. Do not duplicate Journal facts in Insights; cite evidence
 identities and preserve scope, decision effect, contrary evidence, and revisit conditions. Put static
 reference material in a Skill's references.
-Use `skills/<name>/SKILL.md` with YAML name/description. Runtime installs Skills into the next
-Claude/Codex Optimizer session's private CLI Home, never into the Evolver or host/global
-configuration. Other backends read these resources from the workspace.
+Curate Skills from actual evidence rather than mechanically converting every Tool. Inspect each
+Tool's source, its invocations in the last Epoch conversations, corresponding Attempt reports, and
+authoritative outcomes. Promote only a mature, repeatable procedure; leave one-off probes,
+task-private scripts, and failed helpers as Tools or remove them. A promoted Claude Skill must be
+`skills/<name>/SKILL.md`, with YAML `name` matching the directory and a concrete trigger-oriented
+`description`. Include a concise procedure, prerequisites, validation criteria, dependencies, and
+limitations; keep supporting scripts and references within the Skill package. If the Skill becomes
+the canonical owner, remove or reduce the redundant Tool and update both indexes. Runtime installs
+valid Skills into the next Claude Optimizer or Bootstrap session's private CLI Home, never into the
+Evolver or host/global configuration. Other backends can read workspace resources but are not
+promised native Skill discovery.
 Update the corresponding README whenever content is added, changed, renamed, or
 removed. Keep indexes synchronized and concise, with tool invocation details where applicable.
 Each reusable directory has one effective copy in the Candidate; edit it directly.

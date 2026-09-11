@@ -46,6 +46,9 @@ implementation, configuration, prompts, insights, skills, and tools. Each adapti
 directory has one effective copy and a maintained README index. Runtime seals the complete Bundle
 and its adaptive checkpoint for subsequent optimization. Input Bundles and per-Trajectory resources
 are read-only evidence. Evolver, Runtime, and deployment policies are outside the Candidate.
+Optimizer sessions may modify only Tools; this Evolver uses completed conversations, reports, and
+authoritative outcomes to curate Prompts, Insights, and Skills. Mature repeatable Tools may be
+promoted into Claude Skill packages, while one-off or failed helpers should not be promoted.
 
 ## Repository contract
 

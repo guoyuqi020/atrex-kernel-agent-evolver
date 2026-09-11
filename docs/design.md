@@ -76,8 +76,11 @@ Supplementary learned resources from available Trajectories are under
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`. Evolver can compare and
 synthesize eligible Agents' prompts, insights, skills, and tools. Every adaptive directory
 must retain a README index updated on content changes. Insights hold scoped, evidence-derived
-decision guidance; static reference material belongs in Skill references. Runtime installs Skill
-directories only when starting the next Claude/Codex Optimizer session, into its private CLI Home.
+decision guidance; static reference material belongs in Skill references. Optimizer changes only
+Tools. Evolver promotes a Tool to `skills/<name>/SKILL.md` only when actual Session use and outcomes
+support a reusable procedure, then removes redundant copies and updates both indexes. Runtime
+installs Skill directories only when starting the next Claude Optimizer session, into its private
+CLI Home.
 
 Prior reports at `input/evolution-reports/evo-N.json` use `parent.path`, `generated_agent.path`,
 to reference complete Bundles. `report.contributing_paths` retains the original Session-relative
