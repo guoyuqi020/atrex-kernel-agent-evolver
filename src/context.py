@@ -20,7 +20,7 @@ _REVISION_ID = re.compile(r"^agentrev_[0-9a-f]{32}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _TRAJECTORY_DIRECTORY = re.compile(r"^trajectory-([0-9]{8})$")
 _EVOLUTION_REPORT_FILE = re.compile(r"^evo-([1-9][0-9]*)\.json$")
-RUNTIME_STATE_DIRECTORIES = ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
+RUNTIME_STATE_DIRECTORIES = ("prompts", "insights", "skills", "tools")
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,7 @@ def validate_adaptive_directories(root: Path, label: str) -> None:
     _real_directory(root, label)
     if not set(RUNTIME_STATE_DIRECTORIES) <= {child.name for child in root.iterdir()}:
         raise ValueError(
-            f"{label} must contain prompts/, memory/, knowledge/, skills/, tools/, hooks/"
+            f"{label} must contain prompts/, insights/, skills/, tools/"
         )
     for name in RUNTIME_STATE_DIRECTORIES:
         tree = _real_directory(root / name, f"{label} {name}")

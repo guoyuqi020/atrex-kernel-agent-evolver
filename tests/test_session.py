@@ -60,7 +60,7 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+    for name in ("prompts", "insights", "skills", "tools"):
         directory = workspace / "candidate" / name
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")
@@ -495,7 +495,7 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "`relationship` is not `current_epoch_challenger`" in prompt
     assert "when its `parent` is false" in prompt
     assert "`candidate/`" in prompt
-    assert "All Candidate\ncontent can be edited" in prompt
+    assert "All Candidate content can be edited" in prompt
     assert "python3 input/evolver/src/runtime_tools.py evolution-report" in prompt
     assert "scratch/evolution-report-draft.json" in prompt
     assert "never write `scratch/evolution-report.json` directly" in prompt

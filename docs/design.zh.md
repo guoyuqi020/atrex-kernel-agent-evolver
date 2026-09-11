@@ -16,7 +16,7 @@ run-<uuid>/
 │   ├── agents/                # 每个可见 Agent 版本，各一处
 │   │   └── agent-v<N>/
 │   │       ├── src/ and configuration
-│   │       └── {prompts,memory,knowledge,skills,tools,hooks}/
+│   │       └── {prompts,insights,skills,tools}/
 │   ├── evidence/              # 只读、已授权的运行 Evidence
 │   │   └── agent-v<N>/
 │   │       ├── resources/trajectories/trajectory-NNNNNNNN/
@@ -26,7 +26,7 @@ run-<uuid>/
 │   └── evolution-reports/     # 此前的 Agent 创建报告
 ├── candidate/                 # 可写 Agent Candidate
 │   ├── src/ and configuration
-│   └── {prompts,memory,knowledge,skills,tools,hooks}/
+│   └── {prompts,insights,skills,tools}/
 └── scratch/                   # 可写 Report、Trace 与隔离 Agent 状态
 ```
 
@@ -57,7 +57,7 @@ Archive 或超限都会被拒绝。部署后续可以固定另一个 Commit，�
 每个 `input/agents/agent-vN/` 都是完整只读 Bundle。Parent 将实现与获胜最佳 Kernel Trajectory 的
 终态资源组合；缺失时回退到 Epoch 起始 State、Revision Seed 和打包默认内容。下一 Active 使用相同
 起始资源。其他可见 Bundle 使用各自 Revision Seed。Runtime 将完整 Parent 复制到可写 `candidate/`，
-直接包含实现与六个自适应目录，每个目录只有一份有效内容。
+直接包含实现与四个自适应目录，每个目录只有一份有效内容。
 
 每个版本在 `input/evidence/agent-vN/` 下都有优化效果汇总；仅上一个完成 Epoch 的参赛者还暴露该
 Epoch 的 Conversation 与 Attempt Report，按 Trajectory 分组。汇总将最近 Epoch 的正确、错误、无
@@ -67,10 +67,10 @@ Bootstrap 与更早 Epoch 的 Conversation 保持私有。
 
 各 Trajectory 的补充学习资源位于
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`，供 Evolver 比较和融合合格
-Agent 的 prompts、memory、knowledge、skills、tools、hooks。六目录必须维护随内容变化同步更新的
-README。Knowledge 不等于 Bundle 的工程 `docs/`。Runtime 在下一次 Claude/Codex Optimizer Session
-启动前，把 Skill 目录与 `hooks/claude.json` / `hooks/codex.json` 命令 Hook 注册到该 Session 的私有
-CLI Home；不会在 Evolver Session 中激活 Candidate 的 Hooks。
+Agent 的 prompts、insights、skills、tools。四目录必须维护随内容变化同步更新的 README。
+Insights 保存带适用范围、由 Evidence 推导的决策指导；静态参考资料放在 Skill references 中。
+Runtime 在下一次 Claude/Codex Optimizer Session 启动前，把 Skill 目录安装到该 Session 的私有
+CLI Home。
 
 历史报告 `input/evolution-reports/evo-N.json` 用 `parent.path`、`generated_agent.path` 指向完整 Bundle；
 `report.contributing_paths` 保留原始 Session 相对路径，不保证当前资源仍等于历史快照。报告是 Agent 的设计意图，不代表提案获胜；
@@ -82,7 +82,7 @@ CLI Home；不会在 Evolver Session 中激活 Candidate 的 Hooks。
 - `evolved`：修改已准备好的 Parent Bundle。
 - `reuse`：选择合格历史版本原样复用，Candidate 不变，Changed Paths 为空。
 - `evolve_from_history`：先用所选完整历史 Bundle 的可写副本替换 Candidate，再修改；Runtime 校验 Base。
-- `changed_paths` 是相对于所选 Bundle 根目录的准确排序 Diff，包括六目录改动。新版本必须有真实变化。
+- `changed_paths` 是相对于所选 Bundle 根目录的准确排序 Diff，包括四目录改动。新版本必须有真实变化。
 - 贡献来源是实际吸收的 Bundle/Resources 路径，包括 Parent 其他 Trajectory。Runtime 封存准确内容；
   按可见范围与参赛资格校验，不按是否属于 Base 排除。
 - 未实现能力说明具体需求、预期收益及无法实现的原因，不授予权限或选择优势。
@@ -90,7 +90,7 @@ CLI Home；不会在 Evolver Session 中激活 Candidate 的 Hooks。
 持续维护 `scratch/evolution-report-draft.json`，通过
 `python3 input/evolver/src/runtime_tools.py evolution-report --request scratch/evolution-report-draft.json`
 提交。错误返回 `issues`、`request_schema` 和 `recovery`，不发布；首次成功原子生成
-`scratch/evolution-report.json`。Runtime 独立校验完整 Bundle Diff，导入完整 Bundle 和六目录
+`scratch/evolution-report.json`。Runtime 独立校验完整 Bundle Diff，导入完整 Bundle 和四目录
 Checkpoint。效果由下一 Epoch 评估，而非 Evolver 自测。Optimizer 的实现权限与继承规则不变。
 
 `contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许

@@ -38,7 +38,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "input/agents/agent-v1",
         "input/agents/agent-v2",
     ):
-        for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+        for name in ("prompts", "insights", "skills", "tools"):
             directory = workspace / prefix / name
             directory.mkdir(exist_ok=True)
             (directory / "README.md").write_text(f"# {name}\n")
@@ -80,7 +80,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     [
         "input/agents/agent-v1/skills",
         "input/agents/agent-v1/skills/README.md",
-        "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/memory",
+        "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/insights",
     ],
 )
 def test_report_accepts_bundle_and_parent_trajectory_contributions(
@@ -90,7 +90,7 @@ def test_report_accepts_bundle_and_parent_trajectory_contributions(
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
     resources = (
-        workspace / "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/memory"
+        workspace / "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/insights"
     )
     resources.mkdir(parents=True)
     (resources / "lesson.md").write_text("useful learned content")
@@ -132,7 +132,7 @@ def test_report_rejects_invalid_contribution_and_allows_repair(
     with pytest.raises(EvolutionReportIssue, match="contributing_paths"):
         evolution_report(workspace, draft)
     assert not (workspace / "scratch/evolution-report.json").exists()
-    value["contributing_paths"] = ["input/agents/agent-v0/memory"]
+    value["contributing_paths"] = ["input/agents/agent-v0/insights"]
     draft.write_text(json.dumps(value))
     assert evolution_report(workspace, draft)["status"] == "published"
 
@@ -307,7 +307,7 @@ def test_evolution_report_guides_source_diff_repair_and_publishes_once(
 
 
 @pytest.mark.parametrize(
-    "directory", ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
+    "directory", ("prompts", "insights", "skills", "tools")
 )
 def test_evolution_report_accepts_state_only_revision(
     tmp_path: Path,
@@ -325,7 +325,7 @@ def test_evolution_report_accepts_state_only_revision(
 
 
 @pytest.mark.parametrize(
-    "directory", ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
+    "directory", ("prompts", "insights", "skills", "tools")
 )
 def test_report_allows_repairing_a_missing_state_index(
     tmp_path: Path,

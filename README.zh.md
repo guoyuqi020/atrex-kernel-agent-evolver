@@ -37,7 +37,7 @@ Claude 使用全新 Session ID 并启用原生持久化，不恢复旧上下文�
 封存后的 `conversation.jsonl` 是阅读视图：Claude 优先使用原生内容，省去已被完整覆盖的 stdout 消息副本，保留不同的 thinking/text/tool 内容块、未被覆盖的 stdout 内容、诊断、压缩边界和终态结果。重复的初始 Prompt，以及原生队列、标题、文件历史等内部管理事件只从阅读视图中省去。封存前的实时视图仍跟随 stdout。原始 Provider 文件及规范化 usage 索引不变。
 
 Coding Agent 可以修改统一 `candidate/` Bundle 中任意 Agent 内容，包括实现、配置及
-prompts、memory、knowledge、skills、tools、hooks。每个自适应目录只有一份有效内容，并维护 README 索引。
+prompts、insights、skills、tools。每个自适应目录只有一份有效内容，并维护 README 索引。
 Runtime 封存完整 Bundle 和自适应 Checkpoint，供后续优化使用。输入 Bundle 与逐 Trajectory 资源只读；
 Evolver、Runtime 和部署策略不属于 Candidate，不能修改。
 

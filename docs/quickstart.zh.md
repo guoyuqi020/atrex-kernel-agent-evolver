@@ -55,10 +55,10 @@ Transcript，并标记为 `state: interrupted`。高频 Claude `system/thinking_
 省略，并在 `session.json.provider_event_filters` 中声明。
 
 Session Context 列出完整只读 Agent Bundle 及对应 Evidence/Resources 路径。
-可写 `candidate/` 直接包含实现及六个自适应目录，初始是 Parent Bundle，资源种子与下一 Active 相同。
+可写 `candidate/` 直接包含实现及四个自适应目录，初始是 Parent Bundle，资源种子与下一 Active 相同。
 缺少终态 State 时回退到 Epoch 起始 State、Revision Seed 和打包默认内容。
 从历史派生时先复制完整历史 Bundle 到 Candidate，再修改；Changed Paths 相对于 Bundle 根目录，
-包括六目录改动。Runtime 校验并封存完整 Bundle 与六目录 Checkpoint。
+包括四目录改动。Runtime 校验并封存完整 Bundle 与四目录 Checkpoint。
 
 持续维护 `scratch/evolution-report-draft.json`，然后调用：
 

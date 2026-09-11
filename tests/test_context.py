@@ -28,7 +28,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+    for name in ("prompts", "insights", "skills", "tools"):
         directory = workspace / "candidate" / name
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")

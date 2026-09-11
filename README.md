@@ -42,7 +42,7 @@ Claude uses a fresh session ID with native persistence enabled; it never resumes
 The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged.
 
 The Coding Agent may modify any Agent-owned content in the unified `candidate/` Bundle, including
-implementation, configuration, prompts, memory, knowledge, skills, tools, and hooks. Each adaptive
+implementation, configuration, prompts, insights, skills, and tools. Each adaptive
 directory has one effective copy and a maintained README index. Runtime seals the complete Bundle
 and its adaptive checkpoint for subsequent optimization. Input Bundles and per-Trajectory resources
 are read-only evidence. Evolver, Runtime, and deployment policies are outside the Candidate.

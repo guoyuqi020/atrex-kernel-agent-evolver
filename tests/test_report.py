@@ -128,7 +128,7 @@ def test_output_accepts_parent_resource_contributions(tmp_path: Path) -> None:
     path.write_text(
         json.dumps(
             _fusion_draft(
-                ["input/evidence/agent-v0/resources/trajectories/trajectory-00000001/memory"]
+                ["input/evidence/agent-v0/resources/trajectories/trajectory-00000001/insights"]
             )
         )
     )

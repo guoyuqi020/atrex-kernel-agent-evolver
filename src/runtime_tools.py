@@ -296,7 +296,7 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
                     "path": "candidate",
                     "code": "invalid_runtime_state",
                     "message": str(error),
-                    "hint": "Keep prompts/, memory/, knowledge/, skills/, tools/, hooks/ "
+                    "hint": "Keep prompts/, insights/, skills/, tools/ "
                     "and a current README.md in each; "
                     "use only regular files/directories, repair the State, "
                     "then retry evolution-report.",
@@ -398,7 +398,7 @@ def _error_response(error: BaseException) -> dict[str, Any]:
             {
                 "instruction": (
                     "changed_paths contains only exact sorted paths relative to candidate; "
-                    "include changes in prompts/, memory/, knowledge/, skills/, tools/, and hooks/."
+                    "include changes in prompts/, insights/, skills/, and tools/."
                 )
             },
             {
