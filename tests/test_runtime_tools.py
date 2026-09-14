@@ -216,6 +216,40 @@ def test_reuse_accepts_the_last_completed_epoch_losing_branch(
     assert published["status"] == "published"
 
 
+def test_no_change_keeps_the_current_active_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    draft = _typed_draft(
+        workspace,
+        proposal_type="no_change",
+        revision_id=ACTIVE,
+        changed_paths=[],
+    )
+
+    published = evolution_report(workspace, draft)
+
+    assert published["status"] == "published"
+
+
+def test_no_change_rejects_a_modified_candidate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    (workspace / "candidate/prompts/episode.md").write_text("changed\n")
+    draft = _typed_draft(
+        workspace,
+        proposal_type="no_change",
+        revision_id=ACTIVE,
+        changed_paths=[],
+    )
+
+    with pytest.raises(EvolutionReportIssue, match="Candidate"):
+        evolution_report(workspace, draft)
+
+
 def test_evolve_from_history_accepts_the_last_completed_epoch_losing_branch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -79,6 +79,15 @@ def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
             "unimplemented_capabilities": [],
         },
         {
+            "proposal_type": "no_change",
+            "kernel_agent_revision_id": ACTIVE,
+            "hypothesis": "The observed failure was outside Agent control.",
+            "expected_effect": "Reconsider if the failure recurs with a healthy service.",
+            "changed_paths": [],
+            "contributing_paths": [],
+            "unimplemented_capabilities": [],
+        },
+        {
             "proposal_type": "evolve_from_history",
             "kernel_agent_revision_id": HISTORICAL,
             "hypothesis": "Repair the historical design's one weak step.",

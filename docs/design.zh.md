@@ -83,6 +83,8 @@ Optimizer Session 启动前，把 Skill 目录安装到该 Session 的私有 CLI
 - `evolved`：修改已准备好的 Parent Bundle。
 - `reuse`：选择合格历史版本原样复用，Candidate 不变，Changed Paths 为空。
 - `evolve_from_history`：先用所选完整历史 Bundle 的可写副本替换 Candidate，再修改；Runtime 校验 Base。
+- `no_change`：没有证据支持 Agent 可控改进时保持 Active 不变，Candidate 不变；Runtime 关闭剩余
+  Challenger 名额，Epoch 仍正常执行。
 - `changed_paths` 是相对于所选 Bundle 根目录的准确排序 Diff，包括四目录改动。新版本必须有真实变化。
 - 贡献来源是实际吸收的 Bundle/Resources 路径，包括 Parent 其他 Trajectory。Runtime 封存准确内容；
   按可见范围与参赛资格校验，不按是否属于 Base 排除。

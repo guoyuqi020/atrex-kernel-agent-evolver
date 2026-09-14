@@ -3,8 +3,9 @@
 [English](README.md) | 中文
 
 Atrex Kernel Agent Evolver 是一个独立版本化、固定加载的 Agent Bundle。它在一次 Runtime
-创建的 Evolution Workspace 中，为 Optimizer 仓库提出一个 Challenger：可以修改 Active、原样
-复用一个可见历史 Revision，或修改一个可见历史 Revision。它不属于被修改的
+创建的 Evolution Workspace 中提出一份提案：可以修改 Active、原样
+复用一个可见历史 Revision、修改一个可见历史 Revision，或在证据不足以支持 Agent 可控改进时不创建
+Challenger。它不属于被修改的
 Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、Wiki、评测、调度、保留或
 晋升权限。
 
@@ -16,7 +17,7 @@ Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、
 3. 从历史派生时，把所选历史 Agent 的 Source 完整复制到 Candidate，并可从可见历史状态整理一份
    公共 Candidate 状态种子；
 4. 使用仓库内固定 Prompt 启动一次全新的非交互 Coding Agent；
-5. 从 `evolved`、`reuse`、`evolve_from_history` 中选择一种；需要创建新 Revision 时，只允许修改
+5. 从 `evolved`、`reuse`、`evolve_from_history`、`no_change` 中选择一种；需要创建新 Revision 时，只允许修改
    `candidate/`；
 6. 输出未脱敏 Session Artifact，其中包含最终渲染 Prompt、保留的 Provider
    stdout/stderr、标准化 Usage 索引和严格 Provider Token Report；高频 Claude

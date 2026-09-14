@@ -413,8 +413,30 @@ class EvolutionContext:
             raise ValueError("visible Agent versions are duplicated")
         if {child.name for child in agents_root.iterdir()} != visible_versions:
             raise ValueError("visible Agent directories disagree with the manifest")
-        if {child.name for child in evidence_root.iterdir()} != visible_versions:
+        if {child.name for child in evidence_root.iterdir()} != (
+            visible_versions | {"latest-epoch-facts.json", "journal"}
+        ):
             raise ValueError("visible Evidence directories disagree with the manifest")
+        journal_root = _real_directory(evidence_root / "journal", "Evolver Journal")
+        for category in ("directions", "experiments"):
+            category_root = _real_directory(journal_root / category, f"Evolver {category}")
+            index = category_root / "index.json"
+            if index.is_symlink() or not index.is_file():
+                raise ValueError(f"Evolver {category} index is unavailable")
+        latest_facts = _bounded_json_file(
+            evidence_root / "latest-epoch-facts.json",
+            "latest Epoch facts",
+            MAX_OPTIMIZATION_SUMMARY_BYTES,
+        )
+        if set(latest_facts) != {
+            "epoch_number",
+            "selection_reason",
+            "winner_kernel_agent_revision_id",
+            "attempts",
+        }:
+            raise ValueError("latest Epoch facts fields are invalid")
+        if not isinstance(latest_facts["attempts"], list):
+            raise ValueError("latest Epoch facts Attempts are invalid")
         parents = [item for item in visible_agents if item.parent]
         if (
             len(parents) != 1

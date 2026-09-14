@@ -95,6 +95,8 @@ The seven-field `EvolutionOutput` contains `proposal_type`, `kernel_agent_revisi
 - `reuse`: select eligible history unchanged; leave Candidate untouched and report no changed paths.
 - `evolve_from_history`: replace Candidate with a complete writable copy of the selected historical
   Bundle before editing. Runtime validates the declared base.
+- `no_change`: retain Active unchanged when no supported Agent-controllable change exists; leave
+  Candidate untouched. Runtime closes the remaining Challenger slots and runs the Epoch normally.
 - `changed_paths` is the exact sorted diff relative to the selected Bundle root, including all four
   adaptive directories. A new revision must contain a real change.
 - Contributions identify actual incorporated Bundle/resource paths, including Parent Trajectories.

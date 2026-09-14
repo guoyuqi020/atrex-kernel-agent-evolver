@@ -27,6 +27,7 @@ EVOLUTION_OUTPUT_FIELDS = frozenset(
         "unimplemented_capabilities",
     }
 )
+OPTIONAL_EVOLUTION_OUTPUT_FIELDS = frozenset({"suggested_directions"})
 
 
 def _text(value: object, label: str, *, max_length: int) -> str:
@@ -163,6 +164,74 @@ def _unimplemented_capabilities(value: object) -> list[dict[str, str]]:
     return validated
 
 
+def _suggested_directions(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or len(value) > 8:
+        raise ValueError("suggested_directions must be an array with at most 8 entries")
+    required = {
+        "name", "hypothesis", "rationale", "plan", "success_criteria",
+        "stop_conditions",
+    }
+    optional = {
+        "relationship", "derived_from_direction_ids", "derived_from_experiment_ids",
+        "supersedes_direction_id",
+    }
+    for index, proposal in enumerate(value):
+        label = f"suggested_directions[{index}]"
+        if (
+            not isinstance(proposal, dict)
+            or not required <= set(proposal)
+            or set(proposal) - required - optional
+        ):
+            raise ValueError(f"{label} fields are invalid")
+        for field, maximum in (
+            ("name", 200), ("hypothesis", 2000), ("rationale", 2000),
+            ("success_criteria", 1000), ("stop_conditions", 1000),
+        ):
+            _text(proposal[field], f"{label}.{field}", max_length=maximum)
+        plan = proposal["plan"]
+        if not isinstance(plan, list) or not 1 <= len(plan) <= 8:
+            raise ValueError(f"{label}.plan requires 1-8 steps")
+        for step in plan:
+            _text(step, f"{label}.plan step", max_length=1000)
+        relationship = proposal.get("relationship")
+        if relationship is not None and relationship not in {
+            "retry", "refinement", "reimplementation", "correction", "port", "combination",
+            "adoption",
+        }:
+            raise ValueError(f"{label}.relationship is invalid")
+        for field, prefix in (
+            ("derived_from_direction_ids", "direction_"),
+            ("derived_from_experiment_ids", "experiment_"),
+        ):
+            ids = proposal.get(field, [])
+            if not isinstance(ids, list) or len(ids) > 32 or any(
+                not isinstance(item, str)
+                or not item.startswith(prefix)
+                or len(item) != len(prefix) + 32
+                or any(char not in "0123456789abcdef" for char in item[len(prefix):])
+                for item in ids
+            ) or len(set(ids)) != len(ids):
+                raise ValueError(f"{label}.{field} must contain unique valid IDs")
+        supersedes = proposal.get("supersedes_direction_id")
+        if supersedes is not None and (
+            not isinstance(supersedes, str) or not supersedes.startswith("direction_")
+            or len(supersedes) != 42
+            or any(char not in "0123456789abcdef" for char in supersedes[10:])
+        ):
+            raise ValueError(f"{label}.supersedes_direction_id is invalid")
+        parents = proposal.get("derived_from_direction_ids", [])
+        experiments = proposal.get("derived_from_experiment_ids", [])
+        if (relationship is None) != (not parents and not experiments):
+            raise ValueError(f"{label}.relationship disagrees with ancestry")
+        if relationship == "combination" and len(parents) + len(experiments) < 2:
+            raise ValueError(f"{label}.combination requires at least two parents")
+        if supersedes is not None and (relationship != "correction" or supersedes not in parents):
+            raise ValueError(f"{label}.supersedes_direction_id requires a correction parent")
+        if relationship == "adoption" and (len(parents) != 1 or experiments or supersedes):
+            raise ValueError(f"{label}.adoption requires one suggested parent")
+    return value
+
+
 def _validated_output(
     path: Path,
     *,
@@ -184,11 +253,15 @@ def _validated_output(
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ValueError("Evolution output must be a JSON object")
     proposal_type = value.get("proposal_type")
-    if set(value) != EVOLUTION_OUTPUT_FIELDS:
+    if not set(value) >= EVOLUTION_OUTPUT_FIELDS or (
+        set(value) - EVOLUTION_OUTPUT_FIELDS - OPTIONAL_EVOLUTION_OUTPUT_FIELDS
+    ):
         raise ValueError("Evolution output fields are invalid")
     _text(value.get("hypothesis"), "hypothesis", max_length=4000)
     _text(value.get("expected_effect"), "expected_effect", max_length=4000)
     _unimplemented_capabilities(value["unimplemented_capabilities"])
+    if "suggested_directions" in value:
+        _suggested_directions(value["suggested_directions"])
     source_reference = _revision(
         value["kernel_agent_revision_id"],
         "kernel_agent_revision_id",
@@ -196,7 +269,12 @@ def _validated_output(
     )
     changed_paths = _changed_paths(value["changed_paths"])
     contributing = _contributing_paths(value["contributing_paths"])
-    if proposal_type == "reuse":
+    if proposal_type == "no_change":
+        if source_reference != active_revision_id:
+            raise ValueError("no_change must name the current Active revision")
+        if changed_paths or contributing:
+            raise ValueError("no_change requires empty changed_paths and contributing_paths")
+    elif proposal_type == "reuse":
         if source_reference == active_revision_id:
             raise ValueError("reuse cannot select the current Active revision")
         if source_reference not in historical_revision_ids:
@@ -216,7 +294,9 @@ def _validated_output(
         ):
             raise ValueError("evolve_from_history must select completed Lineage history")
     else:
-        raise ValueError("proposal_type must be evolved, reuse, or evolve_from_history")
+        raise ValueError(
+            "proposal_type must be evolved, reuse, evolve_from_history, or no_change"
+        )
     return value
 
 

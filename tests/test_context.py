@@ -21,6 +21,8 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "input/evidence/agent-v0/resources/trajectories",
         "input/evidence/agent-v0/sessions",
         "input/evidence/agent-v0/reports",
+        "input/evidence/journal/directions",
+        "input/evidence/journal/experiments",
         "input/evolution-reports",
         "candidate",
         "candidate/skills",
@@ -33,6 +35,16 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")
     (workspace / "input/evidence/agent-v0/optimization-summary.json").write_text("{}")
+    for category in ("directions", "experiments"):
+        (workspace / f"input/evidence/journal/{category}/index.json").write_text("[]")
+    (workspace / "input/evidence/latest-epoch-facts.json").write_text(
+        json.dumps({
+            "epoch_number": None,
+            "selection_reason": None,
+            "winner_kernel_agent_revision_id": None,
+            "attempts": [],
+        })
+    )
     manifest = {
         "schema_version": 11,
         "parent_revision_id": REVISION,

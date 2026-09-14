@@ -53,6 +53,8 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         "input/evidence/agent-v0/resources/trajectories",
         "input/evidence/agent-v0/sessions",
         "input/evidence/agent-v0/reports",
+        "input/evidence/journal/directions",
+        "input/evidence/journal/experiments",
         "input/evolution-reports",
         "candidate",
         "candidate/skills",
@@ -65,6 +67,14 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")
     (workspace / "input/evidence/agent-v0/optimization-summary.json").write_text("{}")
+    for category in ("directions", "experiments"):
+        (workspace / f"input/evidence/journal/{category}/index.json").write_text("[]")
+    (workspace / "input/evidence/latest-epoch-facts.json").write_text(json.dumps({
+        "epoch_number": None,
+        "selection_reason": None,
+        "winner_kernel_agent_revision_id": None,
+        "attempts": [],
+    }))
     (workspace / "input/agents/agent-v0/atrex-bundle.json").write_text("{}")
     (workspace / "candidate/atrex-bundle.json").write_text("{}")
     visible_agents: list[dict[str, Any]] = [
@@ -465,7 +475,7 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "`dsl` is immutable" in prompt
     assert "Do not redirect the Optimizer to another DSL" in prompt
     assert "add, replace, reorganize, or delete any Agent-owned Source" in prompt
-    assert "Runtime evaluates the Candidate in the next Epoch" in prompt
+    assert "Runtime evaluates an accepted Challenger in the next Epoch" in prompt
     assert EVIDENCE_PROMPT.rstrip() in prompt
     assert '"dsl": "triton"' in prompt
     assert "gateway" not in prompt.lower().split("# session context", 1)[1]
@@ -518,14 +528,14 @@ def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Pat
     normalized = " ".join(prompt.split())
 
     assert "# Session audit" in prompt
-    assert "read every available `conversation.jsonl` and" in normalized
-    assert "`attempt-NNNNNNNN.report.json` under `input/evidence/`" in normalized
-    assert "for every Branch in the most recent completed Epoch" in normalized
+    assert "review `latest-epoch-facts.json`, every available" in normalized
+    assert "`attempt-NNNNNNNN.report.json`" in normalized
+    assert "each Branch's optimization summary" in normalized
     assert "why each losing Branch lost" in normalized
     assert "`latest_epoch.selection_reason` semantics" in normalized
     assert "do not infer selection from raw latency or paths" in normalized
     assert "Find material problems even when a Session eventually succeeded" in normalized
-    assert "A falsified Kernel hypothesis can be productive" in normalized
+    assert "a falsified Kernel hypothesis can be productive" in normalized
     assert "transient service failure is not automatically an Agent defect" in normalized
     for opportunity in (
         "invalid or repeated tool calls",

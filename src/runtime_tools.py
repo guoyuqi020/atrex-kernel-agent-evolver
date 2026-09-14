@@ -39,6 +39,15 @@ def _text_schema(*, max_length: int) -> dict[str, Any]:
     return {"type": "string", "minLength": 1, "maxLength": max_length}
 
 
+def _id_array_schema(prefix: str) -> dict[str, Any]:
+    return {
+        "type": "array",
+        "maxItems": 32,
+        "uniqueItems": True,
+        "items": {"type": "string", "pattern": rf"^{prefix}_[0-9a-f]{{32}}$"},
+    }
+
+
 def request_schema() -> dict[str, Any]:
     """Return the exact Agent-authored Evolution report contract."""
     capability = {
@@ -57,7 +66,7 @@ def request_schema() -> dict[str, Any]:
         "required": sorted(_REPORT_FIELDS),
         "properties": {
             "proposal_type": {
-                "enum": ["evolved", "evolve_from_history", "reuse"],
+                "enum": ["evolved", "evolve_from_history", "reuse", "no_change"],
             },
             "kernel_agent_revision_id": {
                 "type": "string",
@@ -89,6 +98,52 @@ def request_schema() -> dict[str, Any]:
                 "type": "array",
                 "maxItems": 64,
                 "items": capability,
+            },
+            "suggested_directions": {
+                "type": "array",
+                "maxItems": 8,
+                "description": (
+                    "Optional untested lineage Directions, persisted with suggested status "
+                    "independently of Agent promotion."
+                ),
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "name", "hypothesis", "rationale", "plan", "success_criteria",
+                        "stop_conditions",
+                    ],
+                    "properties": {
+                        "name": _text_schema(max_length=200),
+                        "hypothesis": _text_schema(max_length=2000),
+                        "rationale": _text_schema(max_length=2000),
+                        "plan": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 8,
+                            "items": _text_schema(max_length=1000),
+                        },
+                        "success_criteria": _text_schema(max_length=1000),
+                        "stop_conditions": _text_schema(max_length=1000),
+                        "relationship": {
+                            "anyOf": [
+                                {"enum": [
+                                    "retry", "refinement", "reimplementation", "correction",
+                                    "port", "combination", "adoption",
+                                ]},
+                                {"type": "null"},
+                            ]
+                        },
+                        "derived_from_direction_ids": _id_array_schema("direction"),
+                        "derived_from_experiment_ids": _id_array_schema("experiment"),
+                        "supersedes_direction_id": {
+                            "anyOf": [
+                                {"type": "string", "pattern": r"^direction_[0-9a-f]{32}$"},
+                                {"type": "null"},
+                            ]
+                        },
+                    },
+                },
             },
         },
     }
@@ -315,7 +370,7 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
     )
     proposal_type = str(report["proposal_type"])
     actual_paths = _changed_paths(
-        active_bundle if proposal_type == "reuse" else bundle_base,
+        active_bundle if proposal_type in {"reuse", "no_change"} else bundle_base,
         candidate_bundle,
     )
     reported_paths = report["changed_paths"]
@@ -332,16 +387,16 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
                 "actual": reported_paths,
             }
         )
-    if proposal_type == "reuse" and actual_paths:
+    if proposal_type in {"reuse", "no_change"} and actual_paths:
         issues.append(
             {
                 "path": "proposal_type",
-                "code": "reuse_candidate_modified",
-                "message": "reuse requires Candidate Bundle to remain unchanged",
+                "code": "unchanged_candidate_modified",
+                "message": f"{proposal_type} requires Candidate Bundle to remain unchanged",
                 "changed_paths": actual_paths,
             }
         )
-    if proposal_type != "reuse" and not actual_paths:
+    if proposal_type not in {"reuse", "no_change"} and not actual_paths:
         issues.append(
             {
                 "path": "candidate",
@@ -407,7 +462,7 @@ def _error_response(error: BaseException) -> dict[str, Any]:
                     "from input/agents/agent-vN or input/evidence/agent-vN/resources. "
                     "Parent Trajectory resources are allowed; unevaluated Challengers, links, "
                     "path traversal, mere reading, and automatic inheritance are not. "
-                    "Use sorted unique paths, at most 64; reuse requires []."
+                    "Use sorted unique paths, at most 64; reuse and no_change require []."
                 )
             },
         ],

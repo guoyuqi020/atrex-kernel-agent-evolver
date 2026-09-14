@@ -2,9 +2,10 @@
 
 English | [中文](README.zh.md)
 
-Atrex Kernel Agent Evolver is a separately versioned, fixed Agent Bundle that proposes one
-Optimizer-repository Challenger from one Runtime-authored Evolution workspace. It may revise Active,
-reuse a visible historical revision unchanged, or revise a visible historical revision. It is not part of the
+Atrex Kernel Agent Evolver is a separately versioned, fixed Agent Bundle that makes one proposal
+from one Runtime-authored Evolution workspace. It may revise Active,
+reuse or revise a visible historical revision, or decline to create a Challenger when evidence does not
+support an Agent-controllable improvement. It is not part of the
 Optimizer revision it edits, is never visible to an Optimizer Session, and has no Gateway, Wiki,
 evaluation, scheduling, retention, or promotion authority.
 
@@ -17,7 +18,7 @@ One invocation:
 3. when deriving from history, replaces writable Candidate source with the selected historical
    Agent source and may synthesize one common state seed from visible historical state;
 4. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
-5. selects `evolved`, `reuse`, or `evolve_from_history`, permitting changes only in writable
+5. selects `evolved`, `reuse`, `evolve_from_history`, or `no_change`, permitting changes only in writable
    `candidate/` when a new revision is proposed;
 6. emits an unredacted Session Artifact containing the rendered Prompt, retained Provider
    stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; the
