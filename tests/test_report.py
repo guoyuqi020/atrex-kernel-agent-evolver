@@ -23,6 +23,24 @@ def _validate(path: Path) -> dict[str, object]:
     )
 
 
+@pytest.mark.parametrize("suggestions", [[], [{"name": "Untested idea"}]])
+def test_output_rejects_retired_direction_suggestions(tmp_path: Path, suggestions) -> None:
+    path = tmp_path / "output.json"
+    path.write_text(json.dumps({
+        "proposal_type": "no_change",
+        "kernel_agent_revision_id": ACTIVE,
+        "hypothesis": "No evidence-backed Agent change is warranted.",
+        "expected_effect": "Reconsider when contradictory evidence appears.",
+        "changed_paths": [],
+        "contributing_paths": [],
+        "unimplemented_capabilities": [],
+        "suggested_directions": suggestions,
+    }))
+    with pytest.raises(EvolutionOutputContractError, match="no longer supported") as rejected:
+        _validate(path)
+    assert rejected.value.field == "suggested_directions"
+
+
 def test_output_requires_sorted_safe_changed_paths(tmp_path: Path) -> None:
     path = tmp_path / "output.json"
     path.write_text(

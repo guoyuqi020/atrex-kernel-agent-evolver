@@ -551,6 +551,92 @@ def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Pat
     assert "do not copy from it" in normalized
 
 
+def test_rendered_prompt_enables_candidate_service_composition_without_new_authority(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    config = replace(
+        _config(tmp_path, Path("/bin/false")),
+        prompt_path=Path(__file__).resolve().parents[1] / "prompts/evolve.md",
+    )
+    prompt = render_prompt(context, config)
+    normalized = " ".join(prompt.split())
+
+    assert "# Extending Agent capabilities" in prompt
+    assert "injected next-Optimizer service catalog" in normalized
+    assert "composite helper in `candidate/tools/`" in normalized
+    assert "change `candidate/src/` and its workflow" in normalized
+    assert "trigger, exact invocation, inputs, and outputs" in normalized
+    assert "only in later authorized Optimizer/Bootstrap sessions" in normalized
+    assert "deduplication, validation, and terminal protocol" in normalized
+    assert "not live Runtime service calls or GPU tests" in normalized
+    assert "which existing services you considered" in normalized
+    assert "not by itself a Runtime gap" in normalized
+    assert "Do not modify Runtime, sandbox, credentials" in normalized
+
+
+def test_rendered_prompt_reviews_previous_tool_changes_before_iterating(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    config = replace(
+        _config(tmp_path, Path("/bin/false")),
+        prompt_path=Path(__file__).resolve().parents[1] / "prompts/evolve.md",
+    )
+    prompt = render_prompt(context, config)
+    normalized = " ".join(prompt.split())
+
+    assert prompt.index("# Review the previous Evolution") < prompt.index("# Proposal mode")
+    assert "previous evaluated changes, especially new or revised Tools" in normalized
+    assert "`generated_agent.path`" in normalized
+    assert "inspect its Active sessions instead" in normalized
+    assert "Do not assume the highest report number has been evaluated" in normalized
+    assert "effect cannot yet be assessed" in normalized
+    assert "Agent discovered and invoked it" in normalized
+    assert "whether it executed successfully" in normalized
+    assert "used its output in a later decision, experiment, or handoff" in normalized
+    assert "a file's presence or a mention is not proof of use" in normalized
+    assert "no relevant trigger, missed discovery, execution failure" in normalized
+    assert "installation, paths, invocation instructions, and workflow integration" in normalized
+    assert "service and worker failures" in normalized
+    assert "Winning an Epoch does not prove the change helped" in normalized
+    assert "losing does not prove it failed" in normalized
+    assert "retain, repair, simplify, consolidate, or remove" in normalized
+    assert "no separate audit file, new report field, or live effectiveness test" in normalized
+    assert "Complete the previous-Evolution review above before choosing a change" in normalized
+
+
+def test_rendered_prompt_discovers_new_capabilities_from_optimizer_trajectories(
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    config = replace(
+        _config(tmp_path, Path("/bin/false")),
+        prompt_path=Path(__file__).resolve().parents[1] / "prompts/evolve.md",
+    )
+    prompt = render_prompt(context, config)
+    normalized = " ".join(prompt.split())
+
+    assert prompt.index("# Discover improvements from Optimizer trajectories") < prompt.index(
+        "# Proposal mode"
+    )
+    assert (
+        "do not restrict Evolution to repairing tools that an earlier Evolver added" in normalized
+    )
+    assert "latest completed Active and Challenger Branches" in normalized
+    assert "following relevant serial Attempts" in normalized
+    assert "productive and stalled trajectories" in normalized
+    assert "Look beyond the final Kernel latency" in normalized
+    assert "typed binding or a reusable service-composition Tool" in normalized
+    assert "reusable profiling/probe helper" in normalized
+    assert "evidence-comparison helper" in normalized
+    assert "adding or changing Candidate code would improve Kernel optimization" in normalized
+    assert "observable next-Epoch effect" in normalized
+    assert "previous change need not have failed" in normalized
+    assert "do not invent a fixed Kernel search Direction" in normalized
+    assert "`no_change` remains valid" in normalized
+    assert "This analysis fits the existing report fields" in normalized
+    assert "even when previous changes worked" in normalized
+
+
 def test_session_records_large_usage_without_a_token_limit(tmp_path: Path) -> None:
     context = _context(tmp_path)
     config = _config(tmp_path, _budget_exhausting_claude(tmp_path))

@@ -39,15 +39,6 @@ def _text_schema(*, max_length: int) -> dict[str, Any]:
     return {"type": "string", "minLength": 1, "maxLength": max_length}
 
 
-def _id_array_schema(prefix: str) -> dict[str, Any]:
-    return {
-        "type": "array",
-        "maxItems": 32,
-        "uniqueItems": True,
-        "items": {"type": "string", "pattern": rf"^{prefix}_[0-9a-f]{{32}}$"},
-    }
-
-
 def request_schema() -> dict[str, Any]:
     """Return the exact Agent-authored Evolution report contract."""
     capability = {
@@ -98,52 +89,6 @@ def request_schema() -> dict[str, Any]:
                 "type": "array",
                 "maxItems": 64,
                 "items": capability,
-            },
-            "suggested_directions": {
-                "type": "array",
-                "maxItems": 8,
-                "description": (
-                    "Optional untested lineage Directions, persisted with suggested status "
-                    "independently of Agent promotion."
-                ),
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": [
-                        "name", "hypothesis", "rationale", "plan", "success_criteria",
-                        "stop_conditions",
-                    ],
-                    "properties": {
-                        "name": _text_schema(max_length=200),
-                        "hypothesis": _text_schema(max_length=2000),
-                        "rationale": _text_schema(max_length=2000),
-                        "plan": {
-                            "type": "array",
-                            "minItems": 1,
-                            "maxItems": 8,
-                            "items": _text_schema(max_length=1000),
-                        },
-                        "success_criteria": _text_schema(max_length=1000),
-                        "stop_conditions": _text_schema(max_length=1000),
-                        "relationship": {
-                            "anyOf": [
-                                {"enum": [
-                                    "retry", "refinement", "reimplementation", "correction",
-                                    "port", "combination", "adoption",
-                                ]},
-                                {"type": "null"},
-                            ]
-                        },
-                        "derived_from_direction_ids": _id_array_schema("direction"),
-                        "derived_from_experiment_ids": _id_array_schema("experiment"),
-                        "supersedes_direction_id": {
-                            "anyOf": [
-                                {"type": "string", "pattern": r"^direction_[0-9a-f]{32}$"},
-                                {"type": "null"},
-                            ]
-                        },
-                    },
-                },
             },
         },
     }
@@ -331,7 +276,10 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
             max_bytes=max_bytes,
         )
     except EvolutionOutputContractError as error:
-        raise EvolutionReportIssue(str(error), [_structural_issue(str(error))]) from error
+        issue = _structural_issue(str(error))
+        if error.field != "request":
+            issue["path"] = error.field
+        raise EvolutionReportIssue(str(error), [issue]) from error
 
     try:
         validate_contribution_sources(workspace, report["contributing_paths"], agents)
@@ -435,7 +383,8 @@ def _error_response(error: BaseException) -> dict[str, Any]:
         detail = str(error)
     else:
         detail = str(error) or type(error).__name__
-        issues = [{"path": "request", "code": "invalid", "message": detail}]
+        field = error.field if isinstance(error, EvolutionOutputContractError) else "request"
+        issues = [{"path": field, "code": "invalid", "message": detail}]
     return {
         "status": "error",
         "command": "evolution-report",

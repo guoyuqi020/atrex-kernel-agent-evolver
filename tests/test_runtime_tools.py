@@ -397,3 +397,31 @@ def test_evolution_report_cli_returns_schema_and_recovery_on_error(
     assert response["request_schema"]["additionalProperties"] is False
     assert "failed evolution-report publishes nothing" in response["recovery"][0]["instruction"]
     assert not (workspace / "scratch/evolution-report.json").exists()
+
+
+@pytest.mark.parametrize("suggestions", [[], [{"name": "Try a new split"}]])
+def test_evolution_report_rejects_suggestions_and_guides_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    suggestions: list[dict[str, str]],
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    (workspace / "candidate/prompts/episode.md").write_text("revised\n")
+    draft = _draft(workspace, changed_paths=["prompts/episode.md"])
+    value = json.loads(draft.read_text())
+    value["suggested_directions"] = suggestions
+    draft.write_text(json.dumps(value))
+    monkeypatch.chdir(workspace)
+
+    assert main(["evolution-report", "--request", str(draft)]) == 2
+    response = json.loads(capsys.readouterr().out)
+    assert response["issues"][0]["path"] == "suggested_directions"
+    assert "Remove this field" in response["detail"]
+    assert "suggested_directions" not in response["request_schema"]["properties"]
+    assert not (workspace / "scratch/evolution-report.json").exists()
+
+    value.pop("suggested_directions")
+    draft.write_text(json.dumps(value))
+    assert main(["evolution-report", "--request", str(draft)]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "published"
