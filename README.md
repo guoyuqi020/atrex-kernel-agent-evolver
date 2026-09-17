@@ -17,7 +17,8 @@ One invocation:
    from the frozen filesystem;
 3. when deriving from history, replaces writable Candidate source with the selected historical
    Agent source and may synthesize one common state seed from visible historical state;
-4. starts one fresh non-interactive Coding Agent with a repository-owned fixed Prompt;
+4. starts a non-interactive Coding Agent, resuming the Lineage's native Evolver conversation
+   after its first invocation;
 5. selects `evolved`, `reuse`, `evolve_from_history`, or `no_change`, permitting changes only in writable
    `candidate/` when a new revision is proposed;
 6. emits an unredacted Session Artifact containing the rendered Prompt, retained Provider
@@ -29,7 +30,7 @@ One invocation:
 
 ## Agent backends
 
-Version 2 supports `claude`, `codex`, `qodercli`, and `pi` through fresh non-interactive CLI
+Version 2 supports `claude`, `codex`, `qodercli`, and `pi` through non-interactive CLI
 Adapters. The repository configuration supplies standalone defaults; Runtime injects the
 authoritative Backend, Lineage-selected model, reasoning effort, and session settings for managed
 runs. An empty model selects the Backend CLI default. Every Backend emits
@@ -38,7 +39,24 @@ mandatory telemetry, while process wall time and output bounds remain safety lim
 publishes `TokenUsageReportV1` with a null budget; Codex usage and raw rollout capture are obtained
 from its isolated Session Ledger.
 
-Claude uses a fresh session ID with native persistence enabled; it never resumes prior context. Its native main/child JSONLs are retained under `provider/claude-session.raw-jsonl` and `provider/claude-subagents/`, including on timeout or failure. `events.jsonl` contains one latest usage record per response, with `message_id` and `source_path` for joining back to tool calls. Print-stream counters are provisional; repeated updates replace earlier counters. `session.json.response_usage_complete` is true only when native response counters reconcile with the terminal bill. Gaps remain partial with diagnostics; the terminal bill is not replaced with estimates. Do not sum native and stdout copies, or add the terminal bill to response usage.
+Runtime keeps one native Evolver conversation per Lineage and Backend. The first invocation creates
+it; subsequent Evolutions and infrastructure retries resume its explicit session ID (Pi reopens a
+private session file). Agent promotion and controller restarts do not reset the conversation.
+Each invocation still has a fresh Candidate, frozen inputs, report context, workspace, and physical
+Worker Session. Current inputs override retained context; old Candidate edits and scratch are not
+restored. Keep previous Evolution workspaces: they contain the native resume state. Runtime copies
+only Provider transcripts/indexes, not login credentials, into the next isolated home.
+
+Claude's native main/child JSONLs are retained under `provider/claude-session.raw-jsonl` and
+`provider/claude-subagents/`, including on timeout or failure. Each invocation captures only new
+native content; old messages and their usage are not counted again. `events.jsonl` contains one
+latest usage record per new response, with `message_id` and `source_path` for joining back to tool
+calls. Print-stream counters are provisional; repeated updates replace earlier counters.
+`session.json.response_usage_complete` is true only when native response counters reconcile with
+the invocation's terminal bill. Gaps remain partial with diagnostics; the terminal bill is not
+replaced with estimates. Do not sum native and stdout copies, or add the terminal bill to response
+usage. Codex similarly excludes previously billed rollout events, even if stdout reports a
+cumulative session total. `session.json.resumed_session` records whether history was resumed.
 
 The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged.
 

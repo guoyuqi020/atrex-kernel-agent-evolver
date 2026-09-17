@@ -6,6 +6,12 @@ writes, and measures Kernels for the authoritative Session-context `dsl`;
 do not implement a Kernel in this Evolution Session. `evolution_number` identifies the current
 numbered Evolution in this Lineage.
 
+Later invocations resume this Lineage's previous Evolver conversation. The appended Session
+context, Evidence, Parent, Candidate, and report-validation context are refreshed for this
+invocation and override stale paths, identities, conclusions, or pending actions in the retained
+conversation. Inspect the current files before continuing; previous edits are not automatically
+reapplied to the new Candidate. Submit a new report for this invocation, not an old handoff.
+
 The writable `candidate/` is one complete Agent Bundle: implementation and configuration alongside
 `prompts/`, `insights/`, `skills/`, and `tools/`. All Candidate content can be edited here. During
 Optimizer and Bootstrap sessions, only `tools/` is writable; Prompts, Insights, Skills, and

@@ -12,6 +12,31 @@ from backends.process import ProcessObserver, ProcessResult
 from backends.runtime import ClaudeRuntime, TokenBudgetObserver
 
 
+def test_resume_captures_only_new_messages_and_new_subagents(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    native = home / "projects/project/session-1.jsonl"
+    native.parent.mkdir(parents=True)
+    native.write_text(message("old-response"))
+    old_child = native.with_suffix("") / "subagents/agent-old.jsonl"
+    old_child.parent.mkdir(parents=True)
+    old_child.write_text(message("old-child"))
+    ledger = ClaudeSessionLedger({"CLAUDE_CONFIG_DIR": str(home)}, "session-1", resume=True)
+    with native.open("a") as output:
+        output.write(message("new-response"))
+    new_child = old_child.parent / "agent-new.jsonl"
+    new_child.write_text(message("new-child"))
+    trace = tmp_path / "trace"
+    ledger.sync_live(trace)
+    assert "old-response" not in (trace / "provider/claude-session.raw-jsonl").read_text()
+    assert not (trace / "provider/claude-subagents/agent-old.jsonl").exists()
+    files = ledger.capture()
+    events, usage, complete, errors = observe_claude_usage(
+        files, (), TokenUsage(6, 14, 40, 20, 80, "exact")
+    )
+    assert usage.total_tokens == 80 and complete and not errors
+    assert {event.message_id for event in events[:-1]} == {"new-response", "new-child"}
+
+
 def message(message_id: str = "m1", *, output: int = 7, cached: int = 20) -> str:
     return (
         json.dumps(

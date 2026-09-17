@@ -28,7 +28,9 @@ from .model import (
 class ClaudeSessionLedger:
     """Read only this session's main JSONL and its nested subagent JSONLs."""
 
-    def __init__(self, environment: Mapping[str, str], session_id: str) -> None:
+    def __init__(
+        self, environment: Mapping[str, str], session_id: str, *, resume: bool = False
+    ) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
             raise ValueError("unsafe Claude session ID")
         configured = environment.get("CLAUDE_CONFIG_DIR")
@@ -39,6 +41,10 @@ class ClaudeSessionLedger:
         ).resolve() / "projects"
         self.session_id = session_id
         self._offsets: dict[Path, int] = {}
+        self._capture_offsets = (
+            {path: path.stat().st_size for path, _relative in self._paths()} if resume else {}
+        )
+        self._offsets.update(self._capture_offsets)
 
     def _paths(self) -> list[tuple[Path, str]]:
         mains = sorted(self.root.glob(f"*/{self.session_id}.jsonl"))
@@ -81,12 +87,23 @@ class ClaudeSessionLedger:
         paths = self._paths()
         if not paths:
             raise FileNotFoundError("Claude native session ledger not found")
-        return tuple(
-            RawSessionFile(
-                relative, filter_provider_stdout(path.read_bytes().decode("utf-8")).encode("utf-8")
-            )
-            for path, relative in paths
-        )
+        if any(
+            path.stat().st_size < self._capture_offsets.get(path, 0) for path, _relative in paths
+        ):
+            raise ValueError("Claude session ledger was truncated during resume")
+        files: list[RawSessionFile] = []
+        for path, relative in paths:
+            with path.open("rb") as source:
+                source.seek(self._capture_offsets.get(path, 0))
+                payload = source.read()
+            if payload:
+                files.append(
+                    RawSessionFile(
+                        relative,
+                        filter_provider_stdout(payload.decode("utf-8")).encode("utf-8"),
+                    )
+                )
+        return tuple(files)
 
 
 def observe_claude_usage(

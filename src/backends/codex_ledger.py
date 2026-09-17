@@ -168,12 +168,18 @@ class CodexTemporaryHome:
         self._temporary: tempfile.TemporaryDirectory[str] | None = None
         self.path: Path | None = None
 
-    def open(self) -> Path:
-        self._temporary = tempfile.TemporaryDirectory(prefix="atrex-codex-home-")
-        self.path = Path(self._temporary.name).resolve()
+    def open(self, persistent_path: Path | None = None) -> Path:
+        if persistent_path is None:
+            self._temporary = tempfile.TemporaryDirectory(prefix="atrex-codex-home-")
+            self.path = Path(self._temporary.name).resolve()
+        else:
+            persistent_path.mkdir(parents=True, exist_ok=True, mode=0o700)
+            self.path = persistent_path.resolve()
+        if self.path == self.source:
+            return self.path
         for name in self._SHARED_ENTRIES:
             source = self.source / name
-            if source.exists():
+            if source.exists() and not (self.path / name).exists():
                 (self.path / name).symlink_to(source, target_is_directory=source.is_dir())
         for name in self._WRITABLE_COPIES:
             source = self.source / name
@@ -201,6 +207,26 @@ class CodexSessionLedgerObserver:
         self._path: Path | None = None
         self._offset = 0
         self._session_usage: TokenUsage | None = None
+        self._capture_offset = 0
+
+    def begin_resume(self, thread_id: str) -> None:
+        """Exclude already billed events and already captured conversation content."""
+        path = self._find_rollout_path(thread_id)
+        # Prime from the last native cumulative counter without building an event list
+        # or loading the increasingly long prior conversation into memory again.
+        with path.open("rb") as source:
+            for line in source:
+                record = json.loads(line)
+                body = record.get("payload", {})
+                if record.get("type") != "event_msg" or body.get("type") != "token_count":
+                    continue
+                usage = token_usage_from_codex_mapping(
+                    body.get("info", {}).get("total_token_usage")
+                )
+                if usage.total_tokens is not None:
+                    self._session_usage = usage
+            self._offset = source.tell()
+        self._capture_offset = self._offset
 
     def _rollout_paths(self) -> Iterator[Path]:
         root = self.home / "sessions"
@@ -359,10 +385,12 @@ class CodexSessionLedgerObserver:
         if not path.is_relative_to(sessions) or not path.is_file():
             raise CodexLedgerError("Codex rollout path is outside the isolated Session store")
         size = path.stat().st_size
-        if size > max_bytes:
+        if size - self._capture_offset > max_bytes:
             raise CodexLedgerError("Codex rollout exceeds the raw capture byte limit")
-        payload = path.read_bytes()
-        if len(payload) != size:
+        with path.open("rb") as source:
+            source.seek(self._capture_offset)
+            payload = source.read()
+        if len(payload) != size - self._capture_offset:
             raise CodexLedgerError("Codex rollout changed during raw capture")
         return payload
 
@@ -373,7 +401,10 @@ class CodexSessionLedgerObserver:
         previous_session_usage = self._session_usage
         try:
             observation = self.observe(thread_id)
-            if not usage_matches(observation.session_usage, stream_terminal):
+            if not (
+                usage_matches(observation.terminal_usage, stream_terminal)
+                or usage_matches(observation.session_usage, stream_terminal)
+            ):
                 raise CodexLedgerError("Codex ledger usage does not match stdout terminal usage")
             return observation
         except Exception:

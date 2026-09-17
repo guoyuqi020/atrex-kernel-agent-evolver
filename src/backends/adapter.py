@@ -181,6 +181,7 @@ class AgentBackendAdapter(ABC):
         reasoning_effort: str,
         settings: str,
         model: str | None = None,
+        resume: bool = False,
     ) -> list[str]: ...
 
     @abstractmethod
@@ -282,6 +283,7 @@ class ClaudeAdapter(ClaudeLikeAdapter):
         reasoning_effort: str,
         settings: str,
         model: str | None = None,
+        resume: bool = False,
     ) -> list[str]:
         command = [
             "claude",
@@ -290,7 +292,7 @@ class ClaudeAdapter(ClaudeLikeAdapter):
             "--dangerously-skip-permissions",
             "--output-format",
             "stream-json",
-            "--session-id",
+            "--resume" if resume else "--session-id",
             session_id,
             "--name",
             f"atrex-{session_id}",
@@ -363,6 +365,7 @@ class QoderAdapter(ClaudeLikeAdapter):
         reasoning_effort: str,
         settings: str,
         model: str | None = None,
+        resume: bool = False,
     ) -> list[str]:
         command = [
             "qodercli",
@@ -370,9 +373,8 @@ class QoderAdapter(ClaudeLikeAdapter):
             "--dangerously-skip-permissions",
             "--output-format",
             "stream-json",
-            "--session-id",
+            "--resume" if resume else "--session-id",
             session_id,
-            "--no-session-persistence",
             "--reasoning-effort",
             reasoning_effort,
         ]
@@ -399,13 +401,15 @@ class PiAdapter(AgentBackendAdapter):
         reasoning_effort: str,
         settings: str,
         model: str | None = None,
+        resume: bool = False,
     ) -> list[str]:
         command = [
             "pi",
             "--mode",
             "json",
-            "--session-id",
-            session_id,
+            "--print",
+            "--session",
+            "scratch/agent-home/.atrex-pi/evolver.jsonl",
             "--approve",
             "--thinking",
             reasoning_effort,
@@ -487,14 +491,14 @@ class CodexAdapter(AgentBackendAdapter):
         reasoning_effort: str,
         settings: str,
         model: str | None = None,
+        resume: bool = False,
     ) -> list[str]:
-        del session_id
         command = [
             "codex",
             "exec",
+            *(["resume"] if resume else []),
             "--json",
-            "--color",
-            "never",
+            *([] if resume else ["--color", "never"]),
             "--dangerously-bypass-approvals-and-sandbox",
             "-c",
             f'model_reasoning_effort="{reasoning_effort}"',
@@ -505,6 +509,8 @@ class CodexAdapter(AgentBackendAdapter):
         if model is not None:
             command += ["-c", f"model={json.dumps(model, ensure_ascii=False)}"]
         command += settings_args
+        if resume:
+            command.append(session_id)
         command.append(prompt)
         return command
 

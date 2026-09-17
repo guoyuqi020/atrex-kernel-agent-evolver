@@ -202,8 +202,9 @@ class _LiveSessionTraceObserver(ProcessObserver):
     def attach_claude(self, observer: ClaudeSessionLedger) -> None:
         self._claude = observer
 
-    def attach_codex(self, observer: CodexSessionLedgerObserver) -> None:
+    def attach_codex(self, observer: CodexSessionLedgerObserver, thread_id: str = "") -> None:
         self._codex = observer
+        self._codex_thread_id = thread_id
 
     @staticmethod
     def _append(output: TextIO, value: str) -> None:
@@ -388,6 +389,7 @@ class CliAgentRuntime:
         reasoning_effort: str,
         session_settings: str | None = None,
         model: str | None = None,
+        resume: bool = False,
     ) -> list[str]:
         return self._adapter.build_command(
             prompt,
@@ -395,6 +397,7 @@ class CliAgentRuntime:
             reasoning_effort,
             self._session_settings() if session_settings is None else session_settings,
             model,
+            resume,
         )
 
     def _session_settings(self) -> str:
@@ -412,12 +415,17 @@ class CliAgentRuntime:
             request.reasoning_effort,
             request.session_settings,
             request.model,
+            request.resume,
         )
+        if self.id == "codex" and request.resume:
+            command[1:1] = ["--cd", str(request.workspace)]
         environment = build_session_environment(self.id)
         environment.update(request.environment)
         environment["IS_SANDBOX"] = "1"
         claude_observer = (
-            ClaudeSessionLedger(environment, session_id) if self.id == "claude" else None
+            ClaudeSessionLedger(environment, session_id, resume=request.resume)
+            if self.id == "claude"
+            else None
         )
         codex_observer = None
         codex_temporary_home = None
@@ -427,11 +435,19 @@ class CliAgentRuntime:
         if self.id == "codex":
             try:
                 codex_temporary_home = CodexTemporaryHome(codex_home(environment))
-                isolated_home = codex_temporary_home.open()
+                isolated_home = codex_temporary_home.open(
+                    request.workspace / "scratch/agent-home/.codex"
+                    if request.persistent_session
+                    else None
+                )
                 isolated_home_ready = True
                 environment["CODEX_HOME"] = str(isolated_home)
                 codex_observer = CodexSessionLedgerObserver(isolated_home)
+                if request.resume:
+                    codex_observer.begin_resume(session_id)
             except Exception as exc:
+                if request.resume:
+                    raise  # A missing native history must never silently create a new thread.
                 pre_observation_errors = (f"codex_ledger_setup_failed:{type(exc).__name__}",)
                 if not isolated_home_ready:
                     if codex_temporary_home is not None:
@@ -464,7 +480,7 @@ class CliAgentRuntime:
         if live_trace_observer is not None and claude_observer is not None:
             live_trace_observer.attach_claude(claude_observer)
         if live_trace_observer is not None and codex_observer is not None:
-            live_trace_observer.attach_codex(codex_observer)
+            live_trace_observer.attach_codex(codex_observer, session_id if request.resume else "")
         observers = tuple(
             observer for observer in (live_trace_observer, budget_observer) if observer is not None
         )
@@ -518,7 +534,9 @@ class CliAgentRuntime:
         )
         codex_capture_thread_id = ""
         if codex_observer is not None:
-            observed_session_id = codex_thread_id_from_stream(stdout)
+            observed_session_id = codex_thread_id_from_stream(stdout) or (
+                session_id if request.resume else ""
+            )
             try:
                 if not observed_session_id:
                     observed_session_id = codex_observer.identify_new_thread(request.workspace)
@@ -578,6 +596,13 @@ class CliAgentRuntime:
                     observation_errors += (
                         f"codex_raw_rollout_capture_failed:{type(exc).__name__}",
                     )
+        if self.id == "pi" and request.persistent_session:
+            native = request.workspace / "scratch/agent-home/.atrex-pi/evolver.jsonl"
+            if native.is_file():
+                with native.open(encoding="utf-8") as source:
+                    header = json.loads(source.readline())
+                if header.get("type") == "session" and isinstance(header.get("id"), str):
+                    session_id = header["id"]
         if codex_temporary_home is not None:
             cleanup_error = codex_temporary_home.close()
             if cleanup_error:

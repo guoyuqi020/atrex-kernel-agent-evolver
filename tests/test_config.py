@@ -69,6 +69,19 @@ def test_config_rejects_incomplete_runtime_binding(tmp_path: Path) -> None:
         )
 
 
+def test_config_loads_runtime_resume_id(tmp_path: Path) -> None:
+    config = EvolverConfig.load(_repository(tmp_path), {
+        "ATREX_EVOLVER_RESUME_SESSION_ID": "prior-session",
+    })
+    assert config.resume_session_id == "prior-session"
+
+
+@pytest.mark.parametrize("value", ("", "../secret", "--last", "a" * 129))
+def test_resume_id_must_be_a_specific_safe_identifier(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ValueError, match="resume session ID"):
+        EvolverConfig.load(_repository(tmp_path), {"ATREX_EVOLVER_RESUME_SESSION_ID": value})
+
+
 def test_config_rejects_prompt_escape(tmp_path: Path) -> None:
     repository = _repository(tmp_path)
     value = json.loads((repository / "atrex-evolver.json").read_text())

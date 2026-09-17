@@ -5,7 +5,10 @@ English | [中文](design.zh.md)
 ## 1. Role and isolation
 
 The Evolver is a separately versioned worker implementation, not a component inside the Optimizer
-Candidate. Runtime launches it in a fresh workspace and process after an Epoch checkpoint exists. The Optimizer
+Candidate. Runtime launches it in a fresh workspace and process after an Epoch checkpoint exists,
+but resumes the same Lineage/Backend's native conversation after its first invocation. Current
+Evidence, Candidate, identities, and report context replace stale filesystem assumptions; previous
+Candidate edits and arbitrary scratch are not inherited. The Optimizer
 never receives the Evolver repository, configuration, Prompt, trace, credentials, or process state.
 
 Runtime materializes this workspace:

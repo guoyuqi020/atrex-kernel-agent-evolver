@@ -66,6 +66,13 @@ class EvolverConfig:
     max_output_manifest_bytes: int
     runtime_bound: bool = False
     model: str | None = None
+    resume_session_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.resume_session_id is not None and not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", self.resume_session_id
+        ):
+            raise ValueError("invalid Runtime Evolver resume session ID")
 
     @classmethod
     def load(
@@ -162,4 +169,5 @@ class EvolverConfig:
             ),
             runtime_bound=runtime_bound,
             model=model,
+            resume_session_id=binding.get("ATREX_EVOLVER_RESUME_SESSION_ID"),
         )

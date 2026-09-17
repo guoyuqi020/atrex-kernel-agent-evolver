@@ -177,8 +177,12 @@ class AgentRunRequest:
     live_trace_path: Path | None = None
     model: str | None = None
     environment: tuple[tuple[str, str], ...] = ()
+    resume: bool = False
+    persistent_session: bool = False
 
     def __post_init__(self) -> None:
+        if self.resume and not self.session_id:
+            raise ValueError("Agent resume requires an explicit session ID")
         if self.usage_budget is not None and self.usage_budget <= 0:
             raise ValueError("Agent usage budget must be positive")
         if self.model is not None and (not self.model.strip() or "\x00" in self.model):

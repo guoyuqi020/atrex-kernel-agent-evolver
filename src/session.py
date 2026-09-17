@@ -28,6 +28,23 @@ from session_transcript import (
 )
 
 _LIVE_TRACE_MARKER = ".runtime-live-session"
+_CONTINUATION_METADATA = ".evolver-session.json"
+
+
+def _rebind_pi_workspace(context: EvolutionContext, config: EvolverConfig) -> None:
+    """Rebind only copied native storage metadata, never old message content."""
+    if config.agent_backend != "pi" or config.resume_session_id is None:
+        return
+    path = context.scratch_root / "agent-home/.atrex-pi/evolver.jsonl"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Pi resume requires its private native session file")
+    first, separator, rest = path.read_bytes().partition(b"\n")
+    header = json.loads(first)
+    if header.get("type") != "session" or header.get("id") != config.resume_session_id:
+        raise ValueError("Pi native session header disagrees with the resume identity")
+    # Pi takes tool cwd from the native header, not from the process cwd on resume.
+    header["cwd"] = str(context.workspace)
+    atomic_bytes(path, json.dumps(header).encode() + separator + rest)
 
 
 def atomic_bytes(path: Path, payload: bytes) -> None:
@@ -78,6 +95,7 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
     visible = {
         "dsl": context.dsl,
         "evolution_number": context.evolution_number,
+        "resumed_session": config.resume_session_id is not None,
         "visible_agent_repositories": [
             {
                 "revision_id": item.revision_id,
@@ -249,6 +267,7 @@ def _start_live_trace(
             "conversation_capture_complete": False,
             "provider_system_prompt_capture": "provider_managed_unavailable",
             "provider_event_filters": list(FILTERED_PROVIDER_EVENTS),
+            "resumed_session": config.resume_session_id is not None,
         },
     )
 
@@ -448,6 +467,7 @@ def _write_trace(
             "provider_system_prompt_capture": "provider_managed_unavailable",
             "provider_event_filters": list(FILTERED_PROVIDER_EVENTS),
             "observation_errors": list(result.observation_errors),
+            "resumed_session": config.resume_session_id is not None,
             "policy_diagnostics": list(result.policy_diagnostics),
             "budget_exhausted": False,
         },
@@ -460,6 +480,7 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
     session_started = False
     live_trace = False
     try:
+        _rebind_pi_workspace(context, config)
         prompt = render_prompt(context, config)
         report_tool_environment = _prepare_evolution_report_tool(context, config)
 
@@ -483,7 +504,19 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
             config.agent_backend,
             process_runner=run_provider,
         )
-        session_id = str(uuid.uuid4())
+        session_id = config.resume_session_id or str(uuid.uuid4())
+        continuation_path = context.scratch_root / "agent-home" / _CONTINUATION_METADATA
+        atomic_json(
+            continuation_path,
+            {
+                "backend": config.agent_backend,
+                "session_id": (
+                    session_id
+                    if config.agent_backend not in {"codex", "pi"} or config.resume_session_id
+                    else ""
+                ),
+            },
+        )
         _start_live_trace(
             context,
             prompt,
@@ -505,7 +538,16 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                 usage_budget=None,
                 live_trace_path=context.session_trace_path,
                 environment=report_tool_environment,
+                resume=config.resume_session_id is not None,
+                persistent_session=True,
             )
+        )
+        atomic_json(
+            continuation_path,
+            {
+                "backend": result.runtime_id,
+                "session_id": result.session_id,
+            },
         )
         _write_trace(context, result, prompt, config, replace_live=live_trace)
         if result.timed_out:

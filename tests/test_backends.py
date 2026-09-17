@@ -23,10 +23,28 @@ def test_every_backend_builds_one_fresh_noninteractive_command() -> None:
     assert commands["claude"][:2] == ["claude", "--print"]
     assert "--no-session-persistence" not in commands["claude"]
     assert commands["claude"][commands["claude"].index("--name") + 1] == "atrex-session"
-    assert "--no-session-persistence" in commands["qodercli"]
+    assert "--no-session-persistence" not in commands["qodercli"]
     assert commands["pi"][:3] == ["pi", "--mode", "json"]
     assert commands["codex"][:3] == ["codex", "exec", "--json"]
     assert all(command[-1] == "prompt" for command in commands.values())
+
+
+def test_every_backend_resumes_a_specific_native_conversation() -> None:
+    for adapter in (ClaudeAdapter(), QoderAdapter(), CodexAdapter(), PiAdapter()):
+        command = adapter.build_command("new prompt", "prior-session", "high", "", "m", True)
+        assert command[-1] == "new prompt"
+        assert "--no-session-persistence" not in command
+        assert "--ephemeral" not in command
+        if adapter.id in {"claude", "qodercli"}:
+            assert command[command.index("--resume") + 1] == "prior-session"
+            assert "--session-id" not in command
+        elif adapter.id == "codex":
+            assert command[:3] == ["codex", "exec", "resume"]
+            assert command[-2] == "prior-session"
+            assert "--color" not in command
+        else:
+            assert command[command.index("--session") + 1].endswith(".atrex-pi/evolver.jsonl")
+            assert "--print" in command
 
 
 def test_every_backend_receives_the_lineage_selected_model() -> None:

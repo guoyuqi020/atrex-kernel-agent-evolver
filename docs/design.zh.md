@@ -5,7 +5,9 @@
 ## 1. 角色与隔离
 
 Evolver 是独立版本化的 Worker 实现，不是 Optimizer Candidate 内的组件。Runtime 在 Epoch
-Checkpoint 完成后，于全新 Workspace 与进程中启动它。Optimizer 永远拿不到 Evolver 仓库、配置、Prompt、
+Checkpoint 完成后，于全新 Workspace 与进程中启动它，但首次调用后持续 resume 同一 Lineage/Backend
+的原生对话。当轮 Evidence、Candidate、身份和报告上下文覆盖旧路径假设；上一轮 Candidate 修改和
+任意 scratch 文件不会继承。Optimizer 永远拿不到 Evolver 仓库、配置、Prompt、
 Trace、Credential 或进程状态。
 
 Runtime 物化以下 Workspace：
