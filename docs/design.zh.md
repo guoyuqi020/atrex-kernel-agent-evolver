@@ -20,6 +20,7 @@ run-<uuid>/
 │   │       ├── src/ and configuration
 │   │       └── {prompts,insights,skills,tools}/
 │   ├── evidence/              # 只读、已授权的运行 Evidence
+│   │   ├── review/             # Runtime 派生的审计、对照与摩擦索引
 │   │   └── agent-v<N>/
 │   │       ├── resources/trajectories/trajectory-NNNNNNNN/
 │   │       ├── optimization-summary.json
@@ -66,6 +67,11 @@ Epoch 的 Conversation 与 Attempt Report，按 Trajectory 分组。汇总将最
 Candidate Attempt 数及最佳正确 Kernel 的逐 Shape 权威 Gateway 结果，与累计参赛、胜、负次数分开。
 `selection_reason` 描述最后一次两两选择，不代表多 Challenger 淘汰过程的每一步。
 Bootstrap 与更早 Epoch 的 Conversation 保持私有。
+
+`review/` 包含三个保守的 Runtime 投影：上一版 Evolution 的 Changed Path 审计、最近 Epoch 的跨
+Trajectory 对照，以及 Workflow 摩擦索引。它们只记录可机械观察的发现、调用、失败、报告引用、准确
+ID 重叠和归一化后的重复构造，是导航索引而不是因果或语义结论。Evolver 修改 Candidate 前，需要沿
+重要条目检查对应 Session、Report、Direction、Experiment 和权威结果。
 
 各 Trajectory 的补充学习资源位于
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`，供 Evolver 比较和融合合格

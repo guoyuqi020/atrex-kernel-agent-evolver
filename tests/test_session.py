@@ -55,6 +55,7 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         "input/evidence/agent-v0/reports",
         "input/evidence/journal/directions",
         "input/evidence/journal/experiments",
+        "input/evidence/review",
         "input/evolution-reports",
         "candidate",
         "candidate/skills",
@@ -74,7 +75,14 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         "selection_reason": None,
         "winner_kernel_agent_revision_id": None,
         "attempts": [],
+        "branch_workflows": [],
     }))
+    for name in (
+        "evolution-change-audit.json",
+        "trajectory-comparison.json",
+        "workflow-friction.json",
+    ):
+        (workspace / "input/evidence/review" / name).write_text("{}")
     (workspace / "input/agents/agent-v0/atrex-bundle.json").write_text("{}")
     (workspace / "candidate/atrex-bundle.json").write_text("{}")
     visible_agents: list[dict[str, Any]] = [
@@ -528,7 +536,8 @@ def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Pat
     normalized = " ".join(prompt.split())
 
     assert "# Session audit" in prompt
-    assert "review `latest-epoch-facts.json`, every available" in normalized
+    assert "review `latest-epoch-facts.json`, the three `review/*.json` indexes" in normalized
+    assert "do not rescan every long Session" in normalized
     assert "`attempt-NNNNNNNN.report.json`" in normalized
     assert "each Branch's optimization summary" in normalized
     assert "why each losing Branch lost" in normalized
@@ -600,7 +609,8 @@ def test_rendered_prompt_reviews_previous_tool_changes_before_iterating(tmp_path
     assert "Winning an Epoch does not prove the change helped" in normalized
     assert "losing does not prove it failed" in normalized
     assert "retain, repair, simplify, consolidate, or remove" in normalized
-    assert "no separate audit file, new report field, or live effectiveness test" in normalized
+    assert "do not create another audit file or report field" in normalized
+    assert "do not run a live effectiveness test" in normalized
     assert "Complete the previous-Evolution review above before choosing a change" in normalized
 
 

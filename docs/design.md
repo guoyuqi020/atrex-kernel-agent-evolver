@@ -21,6 +21,7 @@ run-<uuid>/
 │   │       ├── src/ and configuration
 │   │       └── {prompts,insights,skills,tools}/
 │   ├── evidence/              # read-only authorized execution Evidence
+│   │   ├── review/             # Runtime-derived audit, comparison, friction indexes
 │   │   └── agent-v<N>/
 │   │       ├── resources/trajectories/trajectory-NNNNNNNN/
 │   │       ├── optimization-summary.json
@@ -74,6 +75,13 @@ The summary separates latest-Epoch correct/incorrect/missing-Candidate counts an
 Kernel's per-Shape authoritative Gateway result from career participation/win/loss counts.
 `selection_reason` describes the final pairwise decision, not every step of a multi-Challenger
 tournament. Bootstrap and older-Epoch conversations remain private.
+
+The `review/` directory contains three conservative Runtime projections: a prior-Evolution changed
+path audit, a latest-Epoch cross-Trajectory comparison, and a workflow-friction index. They report
+only mechanically observed discovery, invocation, failures, citations, exact ID overlaps, and
+normalized repeated construction. They are navigation aids rather than causal or semantic verdicts;
+the Evolver follows material entries into the corresponding Session, Report, Direction, Experiment,
+and authoritative outcome before changing the Candidate.
 
 Supplementary learned resources from available Trajectories are under
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`. Evolver can compare and

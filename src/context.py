@@ -21,6 +21,11 @@ _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _TRAJECTORY_DIRECTORY = re.compile(r"^trajectory-([0-9]{8})$")
 _EVOLUTION_REPORT_FILE = re.compile(r"^evo-([1-9][0-9]*)\.json$")
 RUNTIME_STATE_DIRECTORIES = ("prompts", "insights", "skills", "tools")
+REVIEW_FILES = (
+    "evolution-change-audit.json",
+    "trajectory-comparison.json",
+    "workflow-friction.json",
+)
 
 
 @dataclass(frozen=True)
@@ -414,7 +419,7 @@ class EvolutionContext:
         if {child.name for child in agents_root.iterdir()} != visible_versions:
             raise ValueError("visible Agent directories disagree with the manifest")
         if {child.name for child in evidence_root.iterdir()} != (
-            visible_versions | {"latest-epoch-facts.json", "journal"}
+            visible_versions | {"latest-epoch-facts.json", "journal", "review"}
         ):
             raise ValueError("visible Evidence directories disagree with the manifest")
         journal_root = _real_directory(evidence_root / "journal", "Evolver Journal")
@@ -428,15 +433,27 @@ class EvolutionContext:
             "latest Epoch facts",
             MAX_OPTIMIZATION_SUMMARY_BYTES,
         )
+        review_root = _real_directory(evidence_root / "review", "Evolver review indexes")
+        if {child.name for child in review_root.iterdir()} != set(REVIEW_FILES):
+            raise ValueError("Evolver review index layout is invalid")
+        for name in REVIEW_FILES:
+            _bounded_json_file(
+                review_root / name,
+                f"Evolver review index {name}",
+                MAX_OPTIMIZATION_SUMMARY_BYTES,
+            )
         if set(latest_facts) != {
             "epoch_number",
             "selection_reason",
             "winner_kernel_agent_revision_id",
             "attempts",
+            "branch_workflows",
         }:
             raise ValueError("latest Epoch facts fields are invalid")
-        if not isinstance(latest_facts["attempts"], list):
-            raise ValueError("latest Epoch facts Attempts are invalid")
+        if not isinstance(latest_facts["attempts"], list) or not isinstance(
+            latest_facts["branch_workflows"], list
+        ):
+            raise ValueError("latest Epoch facts Attempts or Branch Workflows are invalid")
         parents = [item for item in visible_agents if item.parent]
         if (
             len(parents) != 1

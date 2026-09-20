@@ -23,6 +23,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "input/evidence/agent-v0/reports",
         "input/evidence/journal/directions",
         "input/evidence/journal/experiments",
+        "input/evidence/review",
         "input/evolution-reports",
         "candidate",
         "candidate/skills",
@@ -43,8 +44,15 @@ def _environment(tmp_path: Path) -> dict[str, str]:
             "selection_reason": None,
             "winner_kernel_agent_revision_id": None,
             "attempts": [],
+            "branch_workflows": [],
         })
     )
+    for name in (
+        "evolution-change-audit.json",
+        "trajectory-comparison.json",
+        "workflow-friction.json",
+    ):
+        (workspace / "input/evidence/review" / name).write_text("{}")
     manifest = {
         "schema_version": 11,
         "parent_revision_id": REVISION,
