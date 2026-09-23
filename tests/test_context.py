@@ -31,7 +31,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    for name in ("prompts", "insights", "skills", "tools"):
+    for name in ("prompts", "skills", "tools"):
         directory = workspace / "candidate" / name
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")
@@ -104,6 +104,47 @@ def test_context_loads_exact_runtime_protocol(tmp_path: Path) -> None:
     assert context.candidate_root.name == "candidate"
     assert context.visible_agents[0].resources_path == ("input/evidence/agent-v0/resources")
     assert context.visible_agents[0].runtime_state_trajectory_ordinals == ()
+    assert context.observer is None
+    assert context.next_optimizer_contract_root is None
+
+
+def test_context_loads_next_optimizer_session_contract(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    contract = Path(environment["ATREX_EVOLUTION_WORKSPACE"]) / "input/next-session-contract"
+    contract.mkdir()
+    for name in ("tools.json", "environment.json", "limits.json"):
+        (contract / name).write_text(json.dumps({"schema_version": 1}))
+
+    context = EvolutionContext.load(environment)
+
+    assert context.next_optimizer_contract_root == contract.resolve()
+
+
+def test_context_loads_independent_active_lineage_observer(tmp_path: Path) -> None:
+    environment = _environment(tmp_path)
+    workspace = Path(environment["ATREX_EVOLUTION_WORKSPACE"])
+    for relative in (
+        "input/observer/active/agents/agent-v0/source",
+        "input/observer/active/evidence/agent-v0/resources/trajectories",
+    ):
+        (workspace / relative).mkdir(parents=True)
+    (workspace / "input/observer/active/evidence/agent-v0/optimization-summary.json").write_text(
+        "{}"
+    )
+    manifest = json.loads(environment["ATREX_EVOLUTION_INPUT_JSON"])
+    manifest["observer"] = {
+        "lineage_id": "lineage_0123456789abcdef0123456789abcdef",
+        "relationship": "independent_active_lineage",
+        "evidence_checkpoint": DIGEST,
+        "path": "input/observer/active",
+    }
+    environment["ATREX_EVOLUTION_INPUT_JSON"] = json.dumps(manifest)
+
+    context = EvolutionContext.load(environment)
+
+    assert context.observer is not None
+    assert context.observer.lineage_id == "lineage_0123456789abcdef0123456789abcdef"
+    assert context.observer.path == "input/observer/active"
 
 
 def test_context_derives_next_evolution_number_from_reports(tmp_path: Path) -> None:

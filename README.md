@@ -24,7 +24,8 @@ One invocation:
 6. emits an unredacted Session Artifact containing the rendered Prompt, retained Provider
    stream-json stdout/stderr, a normalized usage index, and a strict provider-token report; the
    high-frequency Claude `system/thinking_tokens` estimate event is intentionally omitted; and
-7. exposes the local `evolution-report` command, which returns structured repair guidance on a
+7. exposes a non-persistent `workflow-check` dry-run for Candidate Workflow repair and the local
+   `evolution-report` command, which returns structured repair guidance on a
    failed draft and atomically publishes the first valid `EvolutionOutput`; Runtime then
    independently validates and seals the proposal.
 
@@ -61,13 +62,15 @@ cumulative session total. `session.json.resumed_session` records whether history
 The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged.
 
 The Coding Agent may modify any Agent-owned content in the unified `candidate/` Bundle, including
-implementation, configuration, prompts, insights, skills, and tools. Each adaptive
+implementation, configuration, prompts, skills, and tools. Each adaptive
 directory has one effective copy and a maintained README index. Runtime seals the complete Bundle
 and its adaptive checkpoint for subsequent optimization. Input Bundles and per-Trajectory resources
 are read-only evidence. Evolver, Runtime, and deployment policies are outside the Candidate.
 Optimizer sessions may modify only Tools; this Evolver uses completed conversations, reports, and
-authoritative outcomes to curate Prompts, Insights, and Skills. Mature repeatable Tools may be
-promoted into Claude Skill packages, while one-off or failed helpers should not be promoted.
+authoritative outcomes to improve task-independent Prompts, Skills, Tools, implementation, or
+Workflow. Task-specific Kernel directions and conclusions remain in Runtime Journals and Reports;
+the Evolver cannot choose what the Optimizer should explore. Mature repeatable Tools may be promoted
+into Claude Skill packages, while one-off or failed helpers should not be promoted.
 
 ## Repository contract
 

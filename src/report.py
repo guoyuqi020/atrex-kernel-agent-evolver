@@ -74,21 +74,36 @@ def _contributing_paths(value: object) -> list[str]:
             raise ValueError(f"{label} must be a nonempty path of at most 1000 characters")
         relative = PurePosixPath(item)
         parts = relative.parts
+        standard_source = (
+            len(parts) >= 3
+            and parts[0] == "input"
+            and parts[1] in {"agents", "evidence"}
+            and parts[2].startswith("agent-v")
+            and parts[2][7:].isdigit()
+            and (parts[1] != "evidence" or (len(parts) >= 4 and parts[3] == "resources"))
+        )
+        observer_source = (
+            len(parts) >= 6
+            and parts[:3] == ("input", "observer", "active")
+            and parts[3] in {"agents", "evidence"}
+            and parts[4].startswith("agent-v")
+            and parts[4][7:].isdigit()
+            and (
+                (parts[3] == "agents" and parts[5] == "source")
+                or (parts[3] == "evidence" and parts[5] == "resources")
+            )
+        )
         if (
             relative.as_posix() != item
             or ".." in parts
             or "\\" in item
             or "\x00" in item
-            or len(parts) < 3
-            or parts[0] != "input"
-            or parts[1] not in {"agents", "evidence"}
-            or not parts[2].startswith("agent-v")
-            or not parts[2][7:].isdigit()
-            or (parts[1] == "evidence" and (len(parts) < 4 or parts[3] != "resources"))
+            or not (standard_source or observer_source)
         ):
             raise ValueError(
                 f"{label} must be canonical and under input/agents/agent-vN "
-                "or input/evidence/agent-vN/resources"
+                "or input/evidence/agent-vN/resources, or under the same Source/Resources "
+                "paths in input/observer/active"
             )
         paths.append(item)
     if paths != sorted(set(paths)):
@@ -105,6 +120,17 @@ def validate_contribution_sources(
     for index, relative in enumerate(paths):
         label = f"contributing_paths[{index}]"
         path = PurePosixPath(relative)
+        if path.is_relative_to(PurePosixPath("input/observer/active")):
+            current = workspace
+            try:
+                for part in path.parts:
+                    current = current / part
+                    metadata = current.lstat()
+                    if stat.S_ISLNK(metadata.st_mode):
+                        raise ValueError(f"{label} cannot traverse a symbolic link")
+            except FileNotFoundError as error:
+                raise ValueError(f"{label} does not exist") from error
+            continue
         owner = next(
             (
                 item
@@ -191,8 +217,8 @@ def _validated_output(
     if "suggested_directions" in value:
         raise EvolutionOutputContractError(
             "suggested_directions is no longer supported. Remove this field; record "
-            "evidence-backed attribution corrections in Candidate Insights, Prompts, "
-            "Skills, Tools, or workflow, citing the relevant Direction and Experiment IDs",
+            "task-independent Agent corrections in Candidate Prompts, Skills, Tools, "
+            "implementation, or workflow; do not steer a future Kernel Direction",
             field="suggested_directions",
         )
     if set(value) != EVOLUTION_OUTPUT_FIELDS:

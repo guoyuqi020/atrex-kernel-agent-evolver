@@ -63,7 +63,7 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         "scratch",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
-    for name in ("prompts", "insights", "skills", "tools"):
+    for name in ("prompts", "skills", "tools"):
         directory = workspace / "candidate" / name
         directory.mkdir(exist_ok=True)
         (directory / "README.md").write_text(f"# {name}\n")
@@ -498,6 +498,7 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert '"reports_path": "input/evidence/agent-v0/reports"' in prompt
     assert '"resources_path": "input/evidence/agent-v0/resources"' in prompt
     assert '"evolution_reports": "input/evolution-reports"' in prompt
+    assert '"tool": "python3 input/evolver/src/runtime_tools.py workflow-check"' in prompt
     assert "`changed_paths`: exact sorted regular-file diff" in prompt
     assert "intentionally\n   omit Revision IDs" not in prompt
     assert '"optimizer_digest"' not in prompt.split("# Session context", 1)[1]
@@ -523,6 +524,35 @@ def test_rendered_prompt_exposes_no_runtime_authority(tmp_path: Path) -> None:
     assert "scratch/evolution-report-draft.json" in prompt
     assert "never write `scratch/evolution-report.json` directly" in prompt
     assert "candidate" in prompt
+
+
+def test_rendered_prompt_forbids_publishing_kernel_advice(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    config = replace(
+        _config(tmp_path, Path("/bin/false")),
+        prompt_path=Path(__file__).resolve().parents[1] / "prompts/evolve.md",
+    )
+    prompt = render_prompt(context, config)
+    normalized = " ".join(prompt.split())
+
+    assert "# Hard publication boundary: no Kernel advice in the Candidate" in prompt
+    assert "it is not reusable Agent content" in normalized
+    assert "particular Kernel optimization mechanism or implementation direction" in normalized
+    assert "Removing IDs, operator names, or measurements" in normalized
+    assert (
+        "A Prompt may teach how to form and verify hypotheses; it must not supply the hypothesis"
+        in normalized
+    )
+    assert (
+        "A Tool may automate a generic operation; it must not encode a preferred Kernel mechanism"
+        in normalized
+    )
+    assert (
+        "A Workflow may organize the search; it must not narrow its technical search space"
+        in normalized
+    )
+    assert "Apply this portability test before publishing" in normalized
+    assert "submit `no_change`" in normalized
 
 
 def test_rendered_prompt_requires_a_complete_session_failure_audit(tmp_path: Path) -> None:
@@ -572,10 +602,12 @@ def test_rendered_prompt_enables_candidate_service_composition_without_new_autho
     normalized = " ".join(prompt.split())
 
     assert "# Extending Agent capabilities" in prompt
-    assert "injected next-Optimizer service catalog" in normalized
+    assert "next_optimizer_session_contract" in normalized
+    assert "agent_contract_check" in normalized
     assert "composite helper in `candidate/tools/`" in normalized
     assert "change `candidate/src/` and its workflow" in normalized
-    assert "trigger, exact invocation, inputs, and outputs" in normalized
+    assert "stable trigger and purpose" in normalized
+    assert "dynamic contract discovery for exact invocation" in normalized
     assert "only in later authorized Optimizer/Bootstrap sessions" in normalized
     assert "deduplication, validation, and terminal protocol" in normalized
     assert "not live Runtime service calls or GPU tests" in normalized

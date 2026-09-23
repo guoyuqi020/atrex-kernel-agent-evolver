@@ -55,10 +55,21 @@ Transcript，并标记为 `state: interrupted`。高频 Claude `system/thinking_
 省略，并在 `session.json.provider_event_filters` 中声明。
 
 Session Context 列出完整只读 Agent Bundle 及对应 Evidence/Resources 路径。
-可写 `candidate/` 直接包含实现及四个自适应目录，初始是 Parent Bundle，资源种子与下一 Active 相同。
+可写 `candidate/` 直接包含实现及 `prompts/`、`skills/`、`tools/` 三个自适应目录，初始是 Parent
+Bundle，资源种子与下一 Active 相同。
 缺少终态 State 时回退到 Epoch 起始 State、Revision Seed 和打包默认内容。
 从历史派生时先复制完整历史 Bundle 到 Candidate，再修改；Changed Paths 相对于 Bundle 根目录，
-包括四目录改动。Runtime 校验并封存完整 Bundle 与四目录 Checkpoint。
+包括三目录改动。Runtime 校验并封存完整 Bundle 与三目录 Checkpoint。
+
+修改 `candidate/workflow/` 后，先在不创建 Runtime 状态、不启动 Optimizer 的情况下检查所有
+支持的 Epoch 响应路径：
+
+```bash
+python3 input/evolver/src/runtime_tools.py workflow-check
+```
+
+根据返回的 Scenario 修复并重复运行，直至返回 `status: valid`。Runtime 会在封存 Candidate 前
+独立重复这项机械检查。
 
 持续维护 `scratch/evolution-report-draft.json`，然后调用：
 

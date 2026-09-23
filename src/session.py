@@ -123,7 +123,31 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
             ),
             "published": "scratch/evolution-report.json",
         },
+        "workflow_check": {
+            "tool": "python3 input/evolver/src/runtime_tools.py workflow-check",
+            "effect": (
+                "Dry-run candidate/workflow against non-persistent Runtime services; "
+                "creates no Epochs, Attempts, measurements, or Registry records."
+            ),
+        },
     }
+    if context.next_optimizer_contract_root is not None:
+        visible["next_optimizer_session_contract"] = {
+            "path": "input/next-session-contract",
+            "files": ["tools.json", "environment.json", "limits.json"],
+            "visibility": "read_only",
+            "agent_contract_check": (
+                "python3 input/evolver/src/runtime_tools.py agent-contract-check"
+            ),
+        }
+    if context.observer is not None:
+        visible["observer_active_lineage"] = {
+            "lineage_id": context.observer.lineage_id,
+            "relationship": "independent_active_lineage",
+            "evidence_checkpoint": context.observer.evidence_checkpoint,
+            "path": context.observer.path,
+            "visibility": "read_only_through_previous_epoch",
+        }
     return (
         template.rstrip()
         + "\n\n"
@@ -155,12 +179,19 @@ def _prepare_evolution_report_tool(
         "report_path": "scratch/evolution-report.json",
         "max_report_bytes": config.max_output_manifest_bytes,
     }
-    return (
+    environment = [
         (
             "EVOLUTION_REPORT_CONTEXT_JSON",
             json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
-        ),
-    )
+        )
+    ]
+    workflow_check = os.environ.get("ATREX_WORKFLOW_CHECK_CONTEXT_JSON")
+    if workflow_check is not None:
+        parsed: object = json.loads(workflow_check)
+        if not isinstance(parsed, dict):
+            raise ValueError("Runtime Workflow check context must be an object")
+        environment.append(("EVOLUTION_WORKFLOW_CHECK_CONTEXT_JSON", workflow_check))
+    return tuple(environment)
 
 
 def _usage_report(

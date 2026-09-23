@@ -59,12 +59,23 @@ the available partial transcript with `state: interrupted`. The high-frequency C
 `session.json.provider_event_filters`.
 
 Session context lists complete read-only Agent Bundles and their evidence/resources paths.
-Writable `candidate/` directly contains implementation and all four adaptive directories.
+Writable `candidate/` directly contains implementation and all three adaptive directories:
+`prompts/`, `skills/`, and `tools/`.
 It starts from the Parent Bundle using the same resource seed as the next Active. Missing terminal
 State falls back to Epoch-start State, revision seed, then packaged defaults.
 For `evolve_from_history`, copy the selected complete historical Bundle into Candidate, then edit.
 Report every changed file relative to the Bundle root, including adaptive-directory modifications.
-Runtime validates and seals the complete Bundle and four-directory checkpoint.
+Runtime validates and seals the complete Bundle and three-directory checkpoint.
+
+After changing `candidate/workflow/`, dry-run all supported Epoch response paths without creating
+Runtime state or launching an Optimizer:
+
+```bash
+python3 input/evolver/src/runtime_tools.py workflow-check
+```
+
+Repair the reported scenario and rerun until it returns `status: valid`. Runtime repeats this
+mechanical check independently before sealing the Candidate.
 
 Maintain `scratch/evolution-report-draft.json`, then submit it with:
 

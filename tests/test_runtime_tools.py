@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from runtime_tools import EvolutionReportIssue, evolution_report, main
+from runtime_tools import EvolutionReportIssue, agent_contract_check, evolution_report, main
 
 ACTIVE = "agentrev_0123456789abcdef0123456789abcdef"
 HISTORICAL = "agentrev_11111111111111111111111111111111"
@@ -38,7 +38,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "input/agents/agent-v1",
         "input/agents/agent-v2",
     ):
-        for name in ("prompts", "insights", "skills", "tools"):
+        for name in ("prompts", "skills", "tools"):
             directory = workspace / prefix / name
             directory.mkdir(exist_ok=True)
             (directory / "README.md").write_text(f"# {name}\n")
@@ -75,12 +75,93 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return workspace
 
 
+def _contract_check_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    compatible: bool,
+) -> Path:
+    workspace = _workspace(tmp_path, monkeypatch)
+    contract = workspace / "input/next-session-contract"
+    contract.mkdir()
+    tools = {
+        "schema_version": 1,
+        "bindings": {"gateway-execute": {}, "runtime-contract": {}},
+        "gateway": {"operations": {"evaluate": {"type": "object"}}},
+    }
+    environment = {"schema_version": 1, "hardware_target": "sm_120"}
+    limits = {"schema_version": 1, "session_timeout_seconds": 3600}
+    for name, value in (
+        ("tools.json", tools),
+        ("environment.json", environment),
+        ("limits.json", limits),
+    ):
+        (contract / name).write_text(json.dumps(value))
+    source = workspace / "candidate/src"
+    source.mkdir()
+    (source / "runtime_tools.py").write_text(
+        """import json, os, sys
+from pathlib import Path
+root = Path(os.environ['ATREX_RUNTIME_CONTRACT_PATH'])
+tools = json.loads((root / 'tools.json').read_text())
+environment = json.loads((root / 'environment.json').read_text())
+limits = json.loads((root / 'limits.json').read_text())
+if 'BROKEN' in __file__:
+    environment = {'schema_version': 1, 'hardware_target': 'wrong'}
+output = Path(sys.argv[sys.argv.index('--output') + 1])
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps({
+    'schema_version': 1,
+    'environment': environment,
+    'limits': limits,
+    'tools': {
+        'gateway-execute': {'operations': tools['gateway']['operations']},
+        'runtime-contract': {'request_style': 'arguments'},
+    },
+}))
+print(json.dumps({'status': 'written'}))
+""".replace("if 'BROKEN' in __file__:", "if True:" if not compatible else "if False:")
+    )
+    monkeypatch.setenv(
+        "ATREX_AGENT_CONTRACT_CHECK_CONTEXT_JSON",
+        json.dumps(
+            {
+                "candidate": "candidate",
+                "contract": "input/next-session-contract",
+            }
+        ),
+    )
+    return workspace
+
+
+def test_agent_contract_check_accepts_dynamic_candidate_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _contract_check_workspace(tmp_path, monkeypatch, compatible=True)
+
+    result = agent_contract_check(workspace)
+
+    assert result["status"] == "valid"
+    assert result["tool_count"] == 2
+
+
+def test_agent_contract_check_rejects_a_stale_environment_copy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _contract_check_workspace(tmp_path, monkeypatch, compatible=False)
+
+    with pytest.raises(ValueError, match="changed or omitted the Runtime environment"):
+        agent_contract_check(workspace)
+
+
 @pytest.mark.parametrize(
     "relative",
     [
         "input/agents/agent-v1/skills",
         "input/agents/agent-v1/skills/README.md",
-        "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/insights",
+        "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/tools",
     ],
 )
 def test_report_accepts_bundle_and_parent_trajectory_contributions(
@@ -90,7 +171,7 @@ def test_report_accepts_bundle_and_parent_trajectory_contributions(
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
     resources = (
-        workspace / "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/insights"
+        workspace / "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/tools"
     )
     resources.mkdir(parents=True)
     (resources / "lesson.md").write_text("useful learned content")
@@ -132,7 +213,7 @@ def test_report_rejects_invalid_contribution_and_allows_repair(
     with pytest.raises(EvolutionReportIssue, match="contributing_paths"):
         evolution_report(workspace, draft)
     assert not (workspace / "scratch/evolution-report.json").exists()
-    value["contributing_paths"] = ["input/agents/agent-v0/insights"]
+    value["contributing_paths"] = ["input/agents/agent-v0/tools"]
     draft.write_text(json.dumps(value))
     assert evolution_report(workspace, draft)["status"] == "published"
 
@@ -341,7 +422,7 @@ def test_evolution_report_guides_source_diff_repair_and_publishes_once(
 
 
 @pytest.mark.parametrize(
-    "directory", ("prompts", "insights", "skills", "tools")
+    "directory", ("prompts", "skills", "tools")
 )
 def test_evolution_report_accepts_state_only_revision(
     tmp_path: Path,
@@ -359,7 +440,47 @@ def test_evolution_report_accepts_state_only_revision(
 
 
 @pytest.mark.parametrize(
-    "directory", ("prompts", "insights", "skills", "tools")
+    "task_fact",
+    (
+        "direction_d7462410254b4c8aa1ba96a0b93a3a58",
+        "sha256:" + "a" * 64,
+    ),
+)
+def test_evolution_report_rejects_task_specific_evidence_in_candidate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    task_fact: str,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    path = workspace / "candidate/prompts/task-specific.md"
+    path.write_text(f"Prefer this measured direction: {task_fact}\n")
+    draft = _draft(workspace, changed_paths=["prompts/task-specific.md"])
+
+    with pytest.raises(EvolutionReportIssue) as caught:
+        evolution_report(workspace, draft)
+
+    assert caught.value.issues[0]["code"] == "task_specific_evidence"
+    assert "Runtime Journal" in caught.value.issues[0]["hint"]
+
+
+def test_evolution_report_accepts_task_independent_process_correction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    path = workspace / "candidate/prompts/evidence-discipline.md"
+    path.write_text("Verify a measurement before drawing a causal conclusion.\n")
+
+    receipt = evolution_report(
+        workspace,
+        _draft(workspace, changed_paths=["prompts/evidence-discipline.md"]),
+    )
+
+    assert receipt["status"] == "published"
+
+
+@pytest.mark.parametrize(
+    "directory", ("prompts", "skills", "tools")
 )
 def test_report_allows_repairing_a_missing_state_index(
     tmp_path: Path,
@@ -397,6 +518,23 @@ def test_evolution_report_cli_returns_schema_and_recovery_on_error(
     assert response["request_schema"]["additionalProperties"] is False
     assert "failed evolution-report publishes nothing" in response["recovery"][0]["instruction"]
     assert not (workspace / "scratch/evolution-report.json").exists()
+
+
+def test_workflow_check_cli_returns_actionable_error_without_runtime_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    monkeypatch.delenv("EVOLUTION_WORKFLOW_CHECK_CONTEXT_JSON", raising=False)
+    monkeypatch.chdir(workspace)
+
+    assert main(["workflow-check"]) == 2
+
+    response = json.loads(capsys.readouterr().out)
+    assert response["command"] == "workflow-check"
+    assert response["error"] == "invalid_workflow"
+    assert "Repair candidate/workflow" in response["recovery"][0]["instruction"]
 
 
 @pytest.mark.parametrize("suggestions", [[], [{"name": "Try a new split"}]])

@@ -20,7 +20,8 @@ _REVISION_ID = re.compile(r"^agentrev_[0-9a-f]{32}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _TRAJECTORY_DIRECTORY = re.compile(r"^trajectory-([0-9]{8})$")
 _EVOLUTION_REPORT_FILE = re.compile(r"^evo-([1-9][0-9]*)\.json$")
-RUNTIME_STATE_DIRECTORIES = ("prompts", "insights", "skills", "tools")
+_AGENT_VERSION = re.compile(r"^agent-v[0-9]+$")
+RUNTIME_STATE_DIRECTORIES = ("prompts", "skills", "tools")
 REVIEW_FILES = (
     "evolution-change-audit.json",
     "trajectory-comparison.json",
@@ -51,6 +52,16 @@ class VisibleAgent:
     challenger_ordinal: int | None
     parent_revision_id: str | None
     created_by: str
+
+
+@dataclass(frozen=True)
+class ObserverLineage:
+    """Independent Active Lineage exposed only as read-only comparison context."""
+
+    lineage_id: str
+    evidence_checkpoint: str
+    path: str
+    root: Path
 
 
 def _object(value: object, label: str) -> dict[str, Any]:
@@ -92,9 +103,7 @@ def _real_directory(path: Path, label: str) -> Path:
 def validate_adaptive_directories(root: Path, label: str) -> None:
     _real_directory(root, label)
     if not set(RUNTIME_STATE_DIRECTORIES) <= {child.name for child in root.iterdir()}:
-        raise ValueError(
-            f"{label} must contain prompts/, insights/, skills/, tools/"
-        )
+        raise ValueError(f"{label} must contain prompts/, skills/, tools/")
     for name in RUNTIME_STATE_DIRECTORIES:
         tree = _real_directory(root / name, f"{label} {name}")
         for entry in tree.rglob("*"):
@@ -157,8 +166,10 @@ class EvolutionContext:
 
     workspace: Path
     visible_agents: tuple[VisibleAgent, ...]
+    observer: ObserverLineage | None
     evidence_root: Path
     evolution_reports_root: Path
+    next_optimizer_contract_root: Path | None
     evolution_number: int
     candidate_root: Path
     scratch_root: Path
@@ -194,7 +205,10 @@ class EvolutionContext:
             "visible_agents",
             "paths",
         }
-        if set(manifest) != expected_fields:
+        if frozenset(manifest) not in {
+            frozenset(expected_fields),
+            frozenset(expected_fields | {"observer"}),
+        }:
             raise ValueError(
                 "Evolution input fields disagree with schema: "
                 f"{sorted(set(manifest) ^ expected_fields)}"
@@ -226,6 +240,79 @@ class EvolutionContext:
         if paths != expected_paths:
             raise ValueError("Evolution paths disagree with protocol v11")
 
+        observer: ObserverLineage | None = None
+        raw_observer = manifest.get("observer")
+        if raw_observer is not None:
+            observer_value = _object(raw_observer, "Evolution observer")
+            if set(observer_value) != {
+                "lineage_id",
+                "relationship",
+                "evidence_checkpoint",
+                "path",
+            }:
+                raise ValueError("Evolution observer fields disagree with protocol v11")
+            observer_lineage_id = _text(
+                observer_value["lineage_id"], "observer lineage_id"
+            )
+            observer_checkpoint = _text(
+                observer_value["evidence_checkpoint"], "observer evidence_checkpoint"
+            )
+            observer_path = _text(observer_value["path"], "observer path")
+            if (
+                re.fullmatch(r"lineage_[0-9a-f]{32}", observer_lineage_id) is None
+                or _DIGEST.fullmatch(observer_checkpoint) is None
+                or observer_value["relationship"] != "independent_active_lineage"
+                or observer_path != "input/observer/active"
+            ):
+                raise ValueError("Evolution observer identity is invalid")
+            observer_root = _real_directory(
+                _expected_path(workspace, observer_path, "observer path"),
+                "Independent Active Lineage view",
+            )
+            if {child.name for child in observer_root.iterdir()} != {"agents", "evidence"}:
+                raise ValueError("Independent Active Lineage view layout is invalid")
+            observer_agents = _real_directory(
+                observer_root / "agents", "Independent Active Agent repositories"
+            )
+            observer_evidence = _real_directory(
+                observer_root / "evidence", "Independent Active Evidence"
+            )
+            observer_versions = {child.name for child in observer_agents.iterdir()}
+            if not observer_versions or any(
+                _AGENT_VERSION.fullmatch(version) is None for version in observer_versions
+            ):
+                raise ValueError("Independent Active Agent versions are invalid")
+            for version in observer_versions:
+                version_root = _real_directory(
+                    observer_agents / version,
+                    f"Independent Active Agent {version}",
+                )
+                if {child.name for child in version_root.iterdir()} != {"source"}:
+                    raise ValueError("Independent Active Agent layout is invalid")
+                _real_directory(version_root / "source", f"Independent Active {version} source")
+                evidence_version = _real_directory(
+                    observer_evidence / version,
+                    f"Independent Active {version} Evidence",
+                )
+                _bounded_json_file(
+                    evidence_version / "optimization-summary.json",
+                    f"Independent Active {version} optimization summary",
+                    MAX_OPTIMIZATION_SUMMARY_BYTES,
+                )
+                _validate_runtime_state(
+                    _real_directory(
+                        evidence_version / "resources",
+                        f"Independent Active {version} runtime state",
+                    ),
+                    observer_lineage_id,
+                )
+            observer = ObserverLineage(
+                observer_lineage_id,
+                observer_checkpoint,
+                observer_path,
+                observer_root,
+            )
+
         agents_root = _real_directory(
             _expected_path(workspace, expected_paths["agents"], "agents path"),
             "Visible Agent repositories",
@@ -249,6 +336,29 @@ class EvolutionContext:
                 raise ValueError("Evolution report number disagrees with its filename")
             evolution_numbers.add(evolution_number)
         current_evolution_number = max(evolution_numbers, default=0) + 1
+        next_optimizer_contract_root: Path | None = None
+        next_contract = workspace / "input/next-session-contract"
+        if next_contract.exists() or next_contract.is_symlink():
+            next_optimizer_contract_root = _real_directory(
+                next_contract,
+                "Next Optimizer Session contract",
+            )
+            if {child.name for child in next_optimizer_contract_root.iterdir()} != {
+                "tools.json",
+                "environment.json",
+                "limits.json",
+            }:
+                raise ValueError("Next Optimizer Session contract layout is invalid")
+            for name in ("tools.json", "environment.json", "limits.json"):
+                value = _bounded_json_file(
+                    next_optimizer_contract_root / name,
+                    f"Next Optimizer Session contract {name}",
+                    MAX_OPTIMIZATION_SUMMARY_BYTES,
+                )
+                if value.get("schema_version") != 1:
+                    raise ValueError(
+                        f"Next Optimizer Session contract {name} schema is unsupported"
+                    )
         raw_visible_agents = manifest["visible_agents"]
         if (
             not isinstance(raw_visible_agents, list)
@@ -425,8 +535,8 @@ class EvolutionContext:
         journal_root = _real_directory(evidence_root / "journal", "Evolver Journal")
         for category in ("directions", "experiments"):
             category_root = _real_directory(journal_root / category, f"Evolver {category}")
-            index = category_root / "index.json"
-            if index.is_symlink() or not index.is_file():
+            index_path = category_root / "index.json"
+            if index_path.is_symlink() or not index_path.is_file():
                 raise ValueError(f"Evolver {category} index is unavailable")
         latest_facts = _bounded_json_file(
             evidence_root / "latest-epoch-facts.json",
@@ -502,8 +612,10 @@ class EvolutionContext:
         return cls(
             workspace=workspace,
             visible_agents=tuple(visible_agents),
+            observer=observer,
             evidence_root=evidence_root,
             evolution_reports_root=evolution_reports_root,
+            next_optimizer_contract_root=next_optimizer_contract_root,
             evolution_number=current_evolution_number,
             candidate_root=candidate_root,
             scratch_root=scratch_root,

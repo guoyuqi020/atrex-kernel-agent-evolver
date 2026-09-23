@@ -19,7 +19,7 @@ run-<uuid>/
 │   ├── agents/                # every visible Agent version, one location each
 │   │   └── agent-v<N>/
 │   │       ├── src/ and configuration
-│   │       └── {prompts,insights,skills,tools}/
+│   │       └── {prompts,skills,tools}/
 │   ├── evidence/              # read-only authorized execution Evidence
 │   │   ├── review/             # Runtime-derived audit, comparison, friction indexes
 │   │   └── agent-v<N>/
@@ -30,7 +30,7 @@ run-<uuid>/
 │   └── evolution-reports/     # prior Agent-creation reports
 ├── candidate/                 # writable Agent Candidate
 │   ├── src/ and configuration
-│   └── {prompts,insights,skills,tools}/
+│   └── {prompts,skills,tools}/
 └── scratch/                   # writable report, trace, and isolated Agent state
 ```
 
@@ -67,7 +67,7 @@ Each `input/agents/agent-vN/` is a complete read-only Bundle. The Parent combine
 with the winning best-Kernel Trajectory's terminal resources; missing terminal State falls back to
 Epoch-start State, revision seed, then packaged defaults. The next Active uses the same initial
 resources. Other visible Bundles use their revision seeds. Runtime copies the complete Parent to
-writable `candidate/`: implementation and four adaptive directories, each present only once.
+writable `candidate/`: implementation and three adaptive directories, each present only once.
 
 Every version has an optimization summary under `input/evidence/agent-vN/`; only participants in
 the last completed Epoch also expose its Conversations and Attempt reports, grouped by Trajectory.
@@ -85,10 +85,11 @@ and authoritative outcome before changing the Candidate.
 
 Supplementary learned resources from available Trajectories are under
 `input/evidence/agent-vN/resources/trajectories/trajectory-NNNNNNNN/`. Evolver can compare and
-synthesize eligible Agents' prompts, insights, skills, and tools. Every adaptive directory
-must retain a README index updated on content changes. Insights hold scoped, evidence-derived
-decision guidance; static reference material belongs in Skill references. Optimizer changes only
-Tools. Evolver promotes a Tool to `skills/<name>/SKILL.md` only when actual Session use and outcomes
+synthesize eligible Agents' prompts, skills, and tools. Every adaptive directory must retain a
+README index updated on content changes. Task-specific facts and search conclusions remain in
+Runtime Journals and Reports; static, task-independent reference material belongs in Skill
+references. Optimizer changes only Tools. Evolver promotes a Tool to `skills/<name>/SKILL.md` only
+when actual Session use and outcomes
 support a reusable procedure, then removes redundant copies and updates both indexes. Runtime
 installs Skill directories only when starting the next Claude Optimizer session, into its private
 CLI Home.
@@ -108,7 +109,7 @@ The seven-field `EvolutionOutput` contains `proposal_type`, `kernel_agent_revisi
   Bundle before editing. Runtime validates the declared base.
 - `no_change`: retain Active unchanged when no supported Agent-controllable change exists; leave
   Candidate untouched. Runtime closes the remaining Challenger slots and runs the Epoch normally.
-- `changed_paths` is the exact sorted diff relative to the selected Bundle root, including all four
+- `changed_paths` is the exact sorted diff relative to the selected Bundle root, including all three
   adaptive directories. A new revision must contain a real change.
 - Contributions identify actual incorporated Bundle/resource paths, including Parent Trajectories.
   Runtime freezes their exact contents; eligibility, not exclusion of the base, determines validity.
@@ -119,7 +120,7 @@ Maintain `scratch/evolution-report-draft.json` and submit through
 `python3 input/evolver/src/runtime_tools.py evolution-report --request scratch/evolution-report-draft.json`.
 Errors return `issues`, `request_schema`, and `recovery` without publishing. The first success
 atomically creates `scratch/evolution-report.json`. Runtime independently validates the complete
-Bundle diff and imports the Bundle plus its four-directory checkpoint. Performance selection happens
+Bundle diff and imports the Bundle plus its three-directory checkpoint. Performance selection happens
 in the next Epoch, not in the Evolver session. Optimizer implementation permissions and inheritance
 rules are unchanged.
 

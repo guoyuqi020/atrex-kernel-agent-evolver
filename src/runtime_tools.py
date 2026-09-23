@@ -4,10 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
+import re
 import stat
+import subprocess
+import sys
 import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -21,10 +25,20 @@ from report import (
 )
 
 _CONTEXT_ENV = "EVOLUTION_REPORT_CONTEXT_JSON"
+_WORKFLOW_CHECK_CONTEXT_ENV = "EVOLUTION_WORKFLOW_CHECK_CONTEXT_JSON"
+_AGENT_CONTRACT_CHECK_CONTEXT_ENV = "ATREX_AGENT_CONTRACT_CHECK_CONTEXT_JSON"
 _IGNORED_DIRECTORIES = frozenset({".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__"})
 _IGNORED_FILES = frozenset({".coverage", ".DS_Store"})
 _IGNORED_SUFFIXES = frozenset({".pyc", ".pyo"})
 _REPORT_FIELDS = EVOLUTION_OUTPUT_FIELDS
+_TASK_EVIDENCE_PATTERNS = (
+    re.compile(
+        r"\b(?:agentrev|attempt|campaign|direction|epoch|experiment|gtrial|kernelrev|lineage)_"
+        r"[0-9a-f]{8,}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bsha256:[0-9a-f]{32,64}\b", re.IGNORECASE),
+)
 
 
 class EvolutionReportIssue(ValueError):
@@ -33,6 +47,23 @@ class EvolutionReportIssue(ValueError):
     def __init__(self, detail: str, issues: list[dict[str, Any]]) -> None:
         super().__init__(detail)
         self.issues = issues
+
+
+def _object_file(path: Path, label: str) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"{label} must be a regular file")
+    value: object = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
+
+
+def _agent_contract_check_available() -> bool:
+    raw = os.environ.get(_AGENT_CONTRACT_CHECK_CONTEXT_ENV)
+    if raw is None or not raw:
+        return False
+    value: object = json.loads(raw)
+    return isinstance(value, dict) and value.get("contract") is not None
 
 
 def _text_schema(*, max_length: int) -> dict[str, Any]:
@@ -81,7 +112,9 @@ def request_schema() -> dict[str, Any]:
                     "maxLength": 1000,
                     "description": (
                         "Canonical workspace-relative path under an eligible Agent Bundle "
-                        "or input/evidence/agent-vN/resources; files or directories are allowed."
+                        "or input/evidence/agent-vN/resources, or the corresponding "
+                        "input/observer/active Source/Resources path; files or directories "
+                        "are allowed."
                     ),
                 },
             },
@@ -192,6 +225,65 @@ def _changed_paths(before: Path, after: Path) -> list[str]:
     return sorted(path for path in left.keys() | right.keys() if left.get(path) != right.get(path))
 
 
+def _added_text(before: Path, after: Path) -> str:
+    """Return only UTF-8 text introduced by one Candidate file change."""
+    try:
+        previous = before.read_text(encoding="utf-8").splitlines(keepends=True)
+    except FileNotFoundError:
+        previous = []
+    except UnicodeDecodeError:
+        return ""
+    try:
+        current = after.read_text(encoding="utf-8").splitlines(keepends=True)
+    except (FileNotFoundError, UnicodeDecodeError):
+        return ""
+    introduced: list[str] = []
+    matcher = difflib.SequenceMatcher(a=previous, b=current, autojunk=False)
+    for operation, _left_start, _left_end, right_start, right_end in matcher.get_opcodes():
+        if operation in {"insert", "replace"}:
+            introduced.extend(current[right_start:right_end])
+    return "".join(introduced)
+
+
+def _task_specific_identity_issues(
+    before: Path,
+    after: Path,
+    changed_paths: list[str],
+) -> list[dict[str, Any]]:
+    """Reject task Evidence identities copied into a reusable Agent Revision."""
+    issues: list[dict[str, Any]] = []
+    for relative in changed_paths:
+        added = _added_text(before / relative, after / relative)
+        matches = sorted(
+            {
+                match.group(0)
+                for pattern in _TASK_EVIDENCE_PATTERNS
+                for match in pattern.finditer(added)
+            }
+        )
+        if not matches:
+            continue
+        issues.append(
+            {
+                "path": f"candidate/{relative}",
+                "code": "task_specific_evidence",
+                "message": (
+                    "A reusable Agent Revision cannot embed task Evidence identities. "
+                    "Keep the concrete Direction, Experiment, Kernel, Result, Attempt, "
+                    "or Artifact facts in Runtime Journal/Reports and implement only the "
+                    "task-independent behavior learned from them."
+                ),
+                "hint": (
+                    "Remove concrete task identities from the Candidate. Cite them only in the "
+                    "Evolution Report provenance and express the reusable correction without "
+                    "choosing a Kernel direction; Runtime Journal retains the task evidence."
+                ),
+                "matches": matches[:16],
+            }
+        )
+    return issues
+
+
 def _structural_issue(error: str) -> dict[str, Any]:
     path = "report"
     for field in sorted(_REPORT_FIELDS, key=len, reverse=True):
@@ -299,7 +391,7 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
                     "path": "candidate",
                     "code": "invalid_runtime_state",
                     "message": str(error),
-                    "hint": "Keep prompts/, insights/, skills/, tools/ "
+                    "hint": "Keep prompts/, skills/, tools/ "
                     "and a current README.md in each; "
                     "use only regular files/directories, repair the State, "
                     "then retry evolution-report.",
@@ -352,8 +444,31 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
                 "message": "A new Agent revision requires a Bundle change",
             }
         )
+    if proposal_type not in {"reuse", "no_change"}:
+        issues.extend(
+            _task_specific_identity_issues(bundle_base, candidate_bundle, actual_paths)
+        )
     if issues:
         raise EvolutionReportIssue("Evolution report disagrees with the Candidate", issues)
+    if proposal_type not in {"reuse", "no_change"} and _agent_contract_check_available():
+        try:
+            agent_contract_check(workspace)
+        except (OSError, RuntimeError, ValueError) as error:
+            raise EvolutionReportIssue(
+                "Candidate cannot consume the next Optimizer Session contract",
+                [
+                    {
+                        "path": "candidate/src/runtime_tools.py",
+                        "code": "incompatible_agent_contract",
+                        "message": str(error) or type(error).__name__,
+                        "hint": (
+                            "Run agent-contract-check, repair dynamic contract discovery, and "
+                            "retry evolution-report. Do not copy live schemas or limits into "
+                            "Prompt text."
+                        ),
+                    }
+                ],
+            ) from error
 
     report_path = _safe_workspace_path(workspace, context["report_path"], "report_path")
     if report_path.exists() or report_path.is_symlink():
@@ -377,7 +492,183 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
     }
 
 
-def _error_response(error: BaseException) -> dict[str, Any]:
+def workflow_check(workspace: Path) -> dict[str, Any]:
+    """Ask the installed trusted Runtime checker to dry-run the Candidate Workflow."""
+    raw = os.environ.get(_WORKFLOW_CHECK_CONTEXT_ENV)
+    if raw is None or not raw or len(raw.encode()) > 64 * 1024:
+        raise ValueError(f"{_WORKFLOW_CHECK_CONTEXT_ENV} is missing or exceeds its byte limit")
+    value: object = json.loads(raw)
+    required = {
+        "candidate",
+        "dsl",
+        "epoch_number",
+        "max_challengers",
+        "optimizer_attempt_budget",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("Runtime Workflow check context fields are invalid")
+    candidate = _safe_workspace_path(workspace, value["candidate"], "candidate")
+    dsl = value["dsl"]
+    epoch_number = value["epoch_number"]
+    max_challengers = value["max_challengers"]
+    optimizer_attempt_budget = value["optimizer_attempt_budget"]
+    if not isinstance(dsl, str) or not dsl:
+        raise ValueError("Workflow check DSL is invalid")
+    for name, item, minimum in (
+        ("epoch_number", epoch_number, 1),
+        ("max_challengers", max_challengers, 0),
+        ("optimizer_attempt_budget", optimizer_attempt_budget, 1),
+    ):
+        if isinstance(item, bool) or not isinstance(item, int) or item < minimum:
+            raise ValueError(f"Workflow check {name} is invalid")
+    from atrex_runtime.kernel_agents.workflow_check import check_agent_workflow
+
+    result = check_agent_workflow(
+        candidate,
+        dsl=dsl,
+        epoch_number=epoch_number,
+        max_challengers=max_challengers,
+        optimizer_attempt_budget=optimizer_attempt_budget,
+    )
+    return {"command": "workflow-check", **result}
+
+
+def agent_contract_check(workspace: Path) -> dict[str, Any]:
+    """Verify that the Candidate can consume the next live Optimizer contract."""
+    raw = os.environ.get(_AGENT_CONTRACT_CHECK_CONTEXT_ENV)
+    if raw is None or not raw or len(raw.encode()) > 64 * 1024:
+        raise ValueError(
+            f"{_AGENT_CONTRACT_CHECK_CONTEXT_ENV} is missing or exceeds its byte limit"
+        )
+    value: object = json.loads(raw)
+    if not isinstance(value, dict) or set(value) != {"candidate", "contract"}:
+        raise ValueError("Runtime Agent contract check context fields are invalid")
+    if value["contract"] is None:
+        raise ValueError("Next Optimizer Session contract is unavailable")
+    candidate = _safe_workspace_path(workspace, value["candidate"], "candidate")
+    contract = _safe_workspace_path(workspace, value["contract"], "contract")
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError("Candidate Bundle is unavailable")
+    if contract.is_symlink() or not contract.is_dir():
+        raise ValueError("Next Optimizer Session contract is unavailable")
+    entrypoint = candidate / "src/runtime_tools.py"
+    if entrypoint.is_symlink() or not entrypoint.is_file():
+        raise ValueError("Candidate has no src/runtime_tools.py contract adapter")
+
+    output = workspace / "scratch/agent-contract-check.json"
+    output.unlink(missing_ok=True)
+    environment = dict(os.environ)
+    environment.update(
+        {
+            "ATREX_RUNTIME_CONTRACT_PATH": str(contract),
+            "ATREX_CORE_PHASE": "optimization_attempt",
+        }
+    )
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(entrypoint),
+                "runtime-contract",
+                "--output",
+                "scratch/agent-contract-check.json",
+            ],
+            cwd=workspace,
+            env=environment,
+            text=True,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("Candidate contract adapter timed out") from error
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise ValueError(
+            "Candidate failed to consume the next Optimizer Session contract"
+            + (f": {detail[:2000]}" if detail else "")
+        )
+    if output.is_symlink() or not output.is_file():
+        raise ValueError("Candidate contract adapter did not write its projected contract")
+    projected = _object_file(output, "Candidate projected contract")
+    source = {
+        name.removesuffix(".json"): _object_file(
+            contract / name,
+            f"Next Optimizer Session contract {name}",
+        )
+        for name in ("tools.json", "environment.json", "limits.json")
+    }
+    if projected.get("environment") != source["environment"]:
+        raise ValueError("Candidate changed or omitted the Runtime environment contract")
+    if projected.get("limits") != source["limits"]:
+        raise ValueError("Candidate changed or omitted the Runtime limit contract")
+    projected_tools = projected.get("tools")
+    bindings = source["tools"].get("bindings")
+    if not isinstance(projected_tools, dict) or not isinstance(bindings, dict):
+        raise ValueError("Candidate projected tool contract is invalid")
+    if set(projected_tools) != set(bindings):
+        raise ValueError("Candidate tool bindings disagree with the Runtime contract")
+    gateway = projected_tools.get("gateway-execute")
+    expected_gateway = source["tools"].get("gateway")
+    if (
+        not isinstance(gateway, dict)
+        or not isinstance(expected_gateway, dict)
+        or gateway.get("operations") != expected_gateway.get("operations")
+    ):
+        raise ValueError("Candidate Gateway schemas disagree with the Runtime contract")
+    return {
+        "command": "agent-contract-check",
+        "status": "valid",
+        "checked": "candidate/src/runtime_tools.py",
+        "contract": str(value["contract"]),
+        "tool_count": len(projected_tools),
+    }
+
+
+def _error_response(error: BaseException, *, command: str) -> dict[str, Any]:
+    if command in {"workflow-check", "agent-contract-check"}:
+        scenario = getattr(error, "scenario", None)
+        phase = getattr(error, "phase", None)
+        response: dict[str, Any] = {
+            "status": "error",
+            "command": command,
+            "error": (
+                "invalid_workflow"
+                if command == "workflow-check"
+                else "incompatible_agent_contract"
+            ),
+            "detail": str(error) or type(error).__name__,
+            "recovery": [
+                {
+                    "instruction": (
+                        "Repair candidate/workflow, then rerun workflow-check. The check is "
+                        "non-persistent and may be repeated until it passes."
+                    )
+                },
+                {
+                    "instruction": (
+                        "Use only the bundled single-Epoch SDK, allocate the exact Optimizer "
+                        "Attempt budget, handle evolve_agent returning null, and finish with "
+                        "epoch.complete()."
+                    )
+                },
+            ],
+        }
+        if command == "agent-contract-check":
+            response["recovery"] = [
+                {
+                    "instruction": (
+                        "Repair the Candidate's dynamic Runtime-contract adapter, then rerun "
+                        "agent-contract-check. Do not copy the live schema or environment limits "
+                        "into Prompts, Skills, or static configuration."
+                    )
+                }
+            ]
+        if isinstance(scenario, str):
+            response["scenario"] = scenario
+        if isinstance(phase, str):
+            response["phase"] = phase
+        return response
     if isinstance(error, EvolutionReportIssue):
         issues = error.issues
         detail = str(error)
@@ -387,7 +678,7 @@ def _error_response(error: BaseException) -> dict[str, Any]:
         issues = [{"path": field, "code": "invalid", "message": detail}]
     return {
         "status": "error",
-        "command": "evolution-report",
+        "command": command,
         "error": "invalid_request",
         "detail": detail,
         "issues": issues,
@@ -402,13 +693,14 @@ def _error_response(error: BaseException) -> dict[str, Any]:
             {
                 "instruction": (
                     "changed_paths contains only exact sorted paths relative to candidate; "
-                    "include changes in prompts/, insights/, skills/, and tools/."
+                    "include changes in prompts/, skills/, and tools/."
                 )
             },
             {
                 "instruction": (
                     "contributing_paths lists existing files or directories actually incorporated "
-                    "from input/agents/agent-vN or input/evidence/agent-vN/resources. "
+                    "from input/agents/agent-vN, input/evidence/agent-vN/resources, or the "
+                    "corresponding input/observer/active Source/Resources path. "
                     "Parent Trajectory resources are allowed; unevaluated Challengers, links, "
                     "path traversal, mere reading, and automatic inheritance are not. "
                     "Use sorted unique paths, at most 64; reuse and no_change require []."
@@ -423,12 +715,25 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     report = commands.add_parser("evolution-report")
     report.add_argument("--request", required=True, type=Path)
+    commands.add_parser("workflow-check")
+    commands.add_parser("agent-contract-check")
     args = parser.parse_args(argv)
     try:
         workspace = Path.cwd().resolve()
-        result = evolution_report(workspace, args.request)
+        if args.command == "workflow-check":
+            result = workflow_check(workspace)
+        elif args.command == "agent-contract-check":
+            result = agent_contract_check(workspace)
+        else:
+            result = evolution_report(workspace, args.request)
     except (OSError, RuntimeError, ValueError) as error:
-        print(json.dumps(_error_response(error), ensure_ascii=False, sort_keys=True))
+        print(
+            json.dumps(
+                _error_response(error, command=args.command),
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
         return 2
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0
