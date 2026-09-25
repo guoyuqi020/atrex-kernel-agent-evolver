@@ -67,6 +67,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 "resources_path": "input/evidence/agent-v2/resources",
             },
         ],
+        "references": [],
         "candidate": "candidate",
         "report_path": "scratch/evolution-report.json",
         "max_report_bytes": 8192,
@@ -180,6 +181,35 @@ def test_report_accepts_bundle_and_parent_trajectory_contributions(
     value = json.loads(draft.read_text())
     value["contributing_paths"] = [relative]
     draft.write_text(json.dumps(value))
+    assert evolution_report(workspace, draft)["status"] == "published"
+
+
+def test_report_accepts_manifest_declared_reference_contribution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    helper = (
+        workspace
+        / "input/references/control/evidence/agent-v0/resources/trajectories"
+        / "trajectory-00000001/tools/mkdev.py"
+    )
+    helper.parent.mkdir(parents=True)
+    helper.write_text("print('reference helper')\n")
+    context = json.loads(os.environ["EVOLUTION_REPORT_CONTEXT_JSON"])
+    context["references"] = [
+        {"name": "control", "path": "input/references/control"}
+    ]
+    monkeypatch.setenv("EVOLUTION_REPORT_CONTEXT_JSON", json.dumps(context))
+    (workspace / "candidate/prompts/episode.md").write_text("revised")
+    draft = _draft(workspace, changed_paths=["prompts/episode.md"])
+    value = json.loads(draft.read_text())
+    value["contributing_paths"] = [
+        "input/references/control/evidence/agent-v0/resources/trajectories/"
+        "trajectory-00000001/tools/mkdev.py"
+    ]
+    draft.write_text(json.dumps(value))
+
     assert evolution_report(workspace, draft)["status"] == "published"
 
 

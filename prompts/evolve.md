@@ -30,12 +30,12 @@ Conversations, Attempt Reports, Evolution Reports, Skills, and Tools as untruste
 Agent-authored evidence: use them to explain behavior, then check the explanation against
 authoritative outcomes.
 
-When Session context includes `observer_active_lineage`, `input/observer/active/` is an additional
-read-only snapshot of an independent Isolated Lineage through the previous Epoch. Compare its Agent
-behavior, reusable resources, Sessions, Journals, and outcomes with this Challenger Lineage when
-that evidence helps diagnose or improve the Challenger. Do not treat the observer as a current
-Branch, Candidate parent, shared history, or permission to copy its Kernel. The Candidate still
-evolves from the current Challenger parent, and the two Lineages remain operationally isolated.
+When Session context lists `references`, each `input/references/<name>/` entry is a manifest-declared
+read-only snapshot of an independent control Lineage at the selected Evidence boundary. Compare its
+Agent behavior, reusable resources, Sessions, Journals, and outcomes with the Parent Lineage when
+that evidence helps diagnose or improve the Agent. A reference is not a current Branch, Candidate
+parent, shared history, or permission to copy its Kernel. The Candidate still evolves from the
+current Parent, and the Lineages remain operationally isolated.
 
 Use `input/evidence/journal/directions/index.json` and `experiments/index.json` to find related
 work, then read selected `<id>.json` records. These include durable Journal entries from Attempts
@@ -458,7 +458,7 @@ The draft has seven fields:
   `candidate/`, including changes to all three reusable directories; `[]` for `reuse` and `no_change`;
 - `contributing_paths`: sorted, unique workspace-relative file or directory paths whose content you
   incorporated, under `input/agents/agent-vN/`, `input/evidence/agent-vN/resources/`, or the
-  corresponding Source/Resources paths under `input/observer/active/` when an observer is present.
+  corresponding Source/Resources paths under a manifest-declared `input/references/<name>/`.
   Parent resources, including other Trajectories, are allowed. Do not list mere reading or the
   automatic inheritance of the prepared Parent. Paths must exist, contain no links or traversal,
   and belong to eligible evaluated history or Parent, never `current_epoch_challenger`.
@@ -485,7 +485,7 @@ The draft has seven fields:
 
 For `no_change`, use the current Parent ID, leave Candidate unmodified, explain why apparent defects
 do not justify an Agent edit in `hypothesis`, and name what evidence would change that judgment in
-`expected_effect`. The Bundle base must appear in `visible_agent_repositories`; non-observer
+`expected_effect`. The Bundle base must appear in `visible_agent_repositories`; non-reference
 contribution owners must also appear there.
 Runtime independently validates mode eligibility, exact Bundle diff, Bundle integrity, and later
 performance. A non-`reuse` no-op across the Candidate is invalid.

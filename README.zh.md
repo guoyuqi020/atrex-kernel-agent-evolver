@@ -11,7 +11,7 @@ Optimizer Revision，Optimizer Session 看不到它，并且它没有 Gateway、
 
 一次调用会：
 
-1. 严格校验 Runtime-private `EvolutionInputManifestV10` 和所有 Runtime 路径；
+1. 严格校验 Runtime-private `EvolutionInputManifestV12` 和所有 Runtime 路径；
 2. 直接从冻结文件系统读取完整 Parent、当前参赛仓库、历史 Agent 仓库、优化汇总、最近 Epoch
    Conversation 和 Runtime State；
 3. 从历史派生时，把所选历史 Agent 的 Source 完整复制到 Candidate，并可从可见历史状态整理一份

@@ -113,6 +113,17 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
             for item in context.visible_agents
         ],
         "evidence": "input/evidence",
+        "references": [
+            {
+                "name": item.name,
+                "lineage_id": item.lineage_id,
+                "relationship": "independent_control_lineage",
+                "evidence_checkpoint": item.evidence_checkpoint,
+                "path": item.path,
+                "visibility": "read_only",
+            }
+            for item in context.references
+        ],
         "evolution_reports": "input/evolution-reports",
         "candidate": "candidate",
         "evolution_report": {
@@ -140,14 +151,6 @@ def render_prompt(context: EvolutionContext, config: EvolverConfig) -> str:
                 "python3 input/evolver/src/runtime_tools.py agent-contract-check"
             ),
         }
-    if context.observer is not None:
-        visible["observer_active_lineage"] = {
-            "lineage_id": context.observer.lineage_id,
-            "relationship": "independent_active_lineage",
-            "evidence_checkpoint": context.observer.evidence_checkpoint,
-            "path": context.observer.path,
-            "visibility": "read_only_through_previous_epoch",
-        }
     return (
         template.rstrip()
         + "\n\n"
@@ -174,6 +177,13 @@ def _prepare_evolution_report_tool(
                 "resources_path": item.resources_path,
             }
             for item in context.visible_agents
+        ],
+        "references": [
+            {
+                "name": item.name,
+                "path": item.path,
+            }
+            for item in context.references
         ],
         "candidate": "candidate",
         "report_path": "scratch/evolution-report.json",
@@ -608,6 +618,13 @@ def execute(context: EvolutionContext, config: EvolverConfig) -> int:
                     "relationship": item.relationship,
                 }
                 for item in context.visible_agents
+            ],
+            [
+                {
+                    "name": item.name,
+                    "path": item.path,
+                }
+                for item in context.references
             ],
         )
         return 0

@@ -55,9 +55,10 @@ class VisibleAgent:
 
 
 @dataclass(frozen=True)
-class ObserverLineage:
-    """Independent Active Lineage exposed only as read-only comparison context."""
+class ReferenceLineage:
+    """Independent Lineage exposed only as named read-only comparison context."""
 
+    name: str
     lineage_id: str
     evidence_checkpoint: str
     path: str
@@ -166,7 +167,7 @@ class EvolutionContext:
 
     workspace: Path
     visible_agents: tuple[VisibleAgent, ...]
-    observer: ObserverLineage | None
+    references: tuple[ReferenceLineage, ...]
     evidence_root: Path
     evolution_reports_root: Path
     next_optimizer_contract_root: Path | None
@@ -203,17 +204,15 @@ class EvolutionContext:
             "dsl",
             "optimizer_digest",
             "visible_agents",
+            "references",
             "paths",
         }
-        if frozenset(manifest) not in {
-            frozenset(expected_fields),
-            frozenset(expected_fields | {"observer"}),
-        }:
+        if set(manifest) != expected_fields:
             raise ValueError(
                 "Evolution input fields disagree with schema: "
                 f"{sorted(set(manifest) ^ expected_fields)}"
             )
-        if manifest["schema_version"] != 11:
+        if manifest["schema_version"] != 12:
             raise ValueError("unsupported Evolution input schema_version")
         parent_revision_id = _text(manifest["parent_revision_id"], "parent_revision_id")
         if _REVISION_ID.fullmatch(parent_revision_id) is None:
@@ -233,85 +232,110 @@ class EvolutionContext:
         expected_paths = {
             "agents": "input/agents",
             "evidence": "input/evidence",
+            "references": "input/references",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-report.json",
         }
         if paths != expected_paths:
-            raise ValueError("Evolution paths disagree with protocol v11")
+            raise ValueError("Evolution paths disagree with protocol v12")
 
-        observer: ObserverLineage | None = None
-        raw_observer = manifest.get("observer")
-        if raw_observer is not None:
-            observer_value = _object(raw_observer, "Evolution observer")
-            if set(observer_value) != {
+        references_root = _real_directory(
+            _expected_path(workspace, expected_paths["references"], "references path"),
+            "Evolution references",
+        )
+        raw_references = manifest["references"]
+        if not isinstance(raw_references, list) or len(raw_references) > 8:
+            raise ValueError("Evolution references must be a bounded array")
+        references: list[ReferenceLineage] = []
+        seen_reference_names: set[str] = set()
+        seen_reference_lineages: set[str] = set()
+        for index, raw_reference in enumerate(raw_references):
+            reference_value = _object(raw_reference, f"Evolution references[{index}]")
+            if set(reference_value) != {
+                "name",
                 "lineage_id",
                 "relationship",
                 "evidence_checkpoint",
                 "path",
             }:
-                raise ValueError("Evolution observer fields disagree with protocol v11")
-            observer_lineage_id = _text(
-                observer_value["lineage_id"], "observer lineage_id"
+                raise ValueError("Evolution reference fields disagree with protocol v12")
+            reference_name = _text(
+                reference_value["name"], "reference name", max_length=64
             )
-            observer_checkpoint = _text(
-                observer_value["evidence_checkpoint"], "observer evidence_checkpoint"
+            reference_lineage_id = _text(
+                reference_value["lineage_id"], "reference lineage_id"
             )
-            observer_path = _text(observer_value["path"], "observer path")
+            reference_checkpoint = _text(
+                reference_value["evidence_checkpoint"], "reference evidence checkpoint"
+            )
+            reference_path = _text(reference_value["path"], "reference path")
             if (
-                re.fullmatch(r"lineage_[0-9a-f]{32}", observer_lineage_id) is None
-                or _DIGEST.fullmatch(observer_checkpoint) is None
-                or observer_value["relationship"] != "independent_active_lineage"
-                or observer_path != "input/observer/active"
+                re.fullmatch(r"[a-z][a-z0-9-]{0,63}", reference_name) is None
+                or re.fullmatch(r"lineage_[0-9a-f]{32}", reference_lineage_id) is None
+                or _DIGEST.fullmatch(reference_checkpoint) is None
+                or reference_value["relationship"] != "independent_control_lineage"
+                or reference_path != f"input/references/{reference_name}"
+                or reference_name in seen_reference_names
+                or reference_lineage_id in seen_reference_lineages
             ):
-                raise ValueError("Evolution observer identity is invalid")
-            observer_root = _real_directory(
-                _expected_path(workspace, observer_path, "observer path"),
-                "Independent Active Lineage view",
+                raise ValueError("Evolution reference identity is invalid")
+            reference_root = _real_directory(
+                _expected_path(workspace, reference_path, "reference path"),
+                f"Evolution reference {reference_name}",
             )
-            if {child.name for child in observer_root.iterdir()} != {"agents", "evidence"}:
-                raise ValueError("Independent Active Lineage view layout is invalid")
-            observer_agents = _real_directory(
-                observer_root / "agents", "Independent Active Agent repositories"
+            if {child.name for child in reference_root.iterdir()} != {"agents", "evidence"}:
+                raise ValueError("Evolution reference layout is invalid")
+            reference_agents = _real_directory(
+                reference_root / "agents", f"Reference {reference_name} Agent repositories"
             )
-            observer_evidence = _real_directory(
-                observer_root / "evidence", "Independent Active Evidence"
+            reference_evidence = _real_directory(
+                reference_root / "evidence", f"Reference {reference_name} Evidence"
             )
-            observer_versions = {child.name for child in observer_agents.iterdir()}
-            if not observer_versions or any(
-                _AGENT_VERSION.fullmatch(version) is None for version in observer_versions
+            reference_versions = {child.name for child in reference_agents.iterdir()}
+            if not reference_versions or any(
+                _AGENT_VERSION.fullmatch(version) is None for version in reference_versions
             ):
-                raise ValueError("Independent Active Agent versions are invalid")
-            for version in observer_versions:
+                raise ValueError("Evolution reference Agent versions are invalid")
+            for version in reference_versions:
                 version_root = _real_directory(
-                    observer_agents / version,
-                    f"Independent Active Agent {version}",
+                    reference_agents / version,
+                    f"Reference {reference_name} Agent {version}",
                 )
                 if {child.name for child in version_root.iterdir()} != {"source"}:
-                    raise ValueError("Independent Active Agent layout is invalid")
-                _real_directory(version_root / "source", f"Independent Active {version} source")
+                    raise ValueError("Evolution reference Agent layout is invalid")
+                _real_directory(
+                    version_root / "source", f"Reference {reference_name} {version} source"
+                )
                 evidence_version = _real_directory(
-                    observer_evidence / version,
-                    f"Independent Active {version} Evidence",
+                    reference_evidence / version,
+                    f"Reference {reference_name} {version} Evidence",
                 )
                 _bounded_json_file(
                     evidence_version / "optimization-summary.json",
-                    f"Independent Active {version} optimization summary",
+                    f"Reference {reference_name} {version} optimization summary",
                     MAX_OPTIMIZATION_SUMMARY_BYTES,
                 )
                 _validate_runtime_state(
                     _real_directory(
                         evidence_version / "resources",
-                        f"Independent Active {version} runtime state",
+                        f"Reference {reference_name} {version} runtime state",
                     ),
-                    observer_lineage_id,
+                    reference_lineage_id,
                 )
-            observer = ObserverLineage(
-                observer_lineage_id,
-                observer_checkpoint,
-                observer_path,
-                observer_root,
+            references.append(
+                ReferenceLineage(
+                    reference_name,
+                    reference_lineage_id,
+                    reference_checkpoint,
+                    reference_path,
+                    reference_root,
+                )
             )
+            seen_reference_names.add(reference_name)
+            seen_reference_lineages.add(reference_lineage_id)
+        if {child.name for child in references_root.iterdir()} != seen_reference_names:
+            raise ValueError("Evolution reference directories disagree with the manifest")
 
         agents_root = _real_directory(
             _expected_path(workspace, expected_paths["agents"], "agents path"),
@@ -385,7 +409,7 @@ class EvolutionContext:
                 "parent_revision_id",
                 "created_by",
             }:
-                raise ValueError("visible Agent fields disagree with protocol v11")
+                raise ValueError("visible Agent fields disagree with protocol v12")
             revision_id = _text(visible["revision_id"], "visible Agent revision_id")
             version = _text(visible["version"], "visible Agent version", max_length=64)
             digest = _text(visible["optimizer_digest"], "visible Agent optimizer_digest")
@@ -612,7 +636,7 @@ class EvolutionContext:
         return cls(
             workspace=workspace,
             visible_agents=tuple(visible_agents),
-            observer=observer,
+            references=tuple(references),
             evidence_root=evidence_root,
             evolution_reports_root=evolution_reports_root,
             next_optimizer_contract_root=next_optimizer_contract_root,

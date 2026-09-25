@@ -112,8 +112,8 @@ def request_schema() -> dict[str, Any]:
                     "maxLength": 1000,
                     "description": (
                         "Canonical workspace-relative path under an eligible Agent Bundle "
-                        "or input/evidence/agent-vN/resources, or the corresponding "
-                        "input/observer/active Source/Resources path; files or directories "
+                        "or input/evidence/agent-vN/resources, or a manifest-declared "
+                        "input/references/NAME Source/Resources path; files or directories "
                         "are allowed."
                     ),
                 },
@@ -147,6 +147,7 @@ def _context(workspace: Path) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != {
         "active_revision_id",
         "visible_agents",
+        "references",
         "candidate",
         "report_path",
         "max_report_bytes",
@@ -181,6 +182,24 @@ def _context(workspace: Path) -> dict[str, Any]:
     active = value.get("active_revision_id")
     if not isinstance(active, str) or active not in seen:
         raise ValueError("Evolution report context Active revision is invalid")
+    references = value.get("references")
+    if not isinstance(references, list) or len(references) > 8:
+        raise ValueError("Evolution report context references are invalid")
+    reference_names: set[str] = set()
+    for index, item in enumerate(references):
+        if not isinstance(item, dict) or set(item) != {"name", "path"}:
+            raise ValueError(f"references[{index}] fields are invalid")
+        name = item.get("name")
+        path = item.get("path")
+        if (
+            not isinstance(name, str)
+            or re.fullmatch(r"[a-z][a-z0-9-]{0,63}", name) is None
+            or name in reference_names
+            or path != f"input/references/{name}"
+        ):
+            raise ValueError(f"references[{index}] identity is invalid")
+        _safe_workspace_path(workspace, path, "reference path")
+        reference_names.add(name)
     max_bytes = value.get("max_report_bytes")
     if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes <= 0:
         raise ValueError("Evolution report byte limit is invalid")
@@ -374,7 +393,14 @@ def evolution_report(workspace: Path, request_path: Path) -> dict[str, Any]:
         raise EvolutionReportIssue(str(error), [issue]) from error
 
     try:
-        validate_contribution_sources(workspace, report["contributing_paths"], agents)
+        raw_references = context.get("references", [])
+        references = raw_references if isinstance(raw_references, list) else []
+        validate_contribution_sources(
+            workspace,
+            report["contributing_paths"],
+            agents,
+            references,
+        )
     except ValueError as error:
         raise EvolutionReportIssue(str(error), [_structural_issue(str(error))]) from error
 
@@ -699,8 +725,8 @@ def _error_response(error: BaseException, *, command: str) -> dict[str, Any]:
             {
                 "instruction": (
                     "contributing_paths lists existing files or directories actually incorporated "
-                    "from input/agents/agent-vN, input/evidence/agent-vN/resources, or the "
-                    "corresponding input/observer/active Source/Resources path. "
+                    "from input/agents/agent-vN, input/evidence/agent-vN/resources, or a "
+                    "manifest-declared input/references/NAME Source/Resources path. "
                     "Parent Trajectory resources are allowed; unevaluated Challengers, links, "
                     "path traversal, mere reading, and automatic inheritance are not. "
                     "Use sorted unique paths, at most 64; reuse and no_change require []."

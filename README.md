@@ -11,7 +11,7 @@ evaluation, scheduling, retention, or promotion authority.
 
 One invocation:
 
-1. validates Runtime-private `EvolutionInputManifestV10` and every Runtime-owned path;
+1. validates Runtime-private `EvolutionInputManifestV12` and every Runtime-owned path;
 2. reads the complete Parent repository, current participant repositories, historical Agent
    repositories, optimization summaries, latest-Epoch Conversations, and runtime state directly
    from the frozen filesystem;

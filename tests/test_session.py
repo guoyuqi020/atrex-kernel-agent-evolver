@@ -56,6 +56,7 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         "input/evidence/journal/directions",
         "input/evidence/journal/experiments",
         "input/evidence/review",
+        "input/references",
         "input/evolution-reports",
         "candidate",
         "candidate/skills",
@@ -103,16 +104,18 @@ def _context(tmp_path: Path, *, with_challenger: bool = False) -> EvolutionConte
         }
     ]
     manifest = {
-        "schema_version": 11,
+        "schema_version": 12,
         "parent_revision_id": REVISION,
         "evidence_checkpoint": DIGEST,
         "idempotency_key": "epoch:test:challenger",
         "dsl": "triton",
         "optimizer_digest": DIGEST,
         "visible_agents": visible_agents,
+        "references": [],
         "paths": {
             "agents": "input/agents",
             "evidence": "input/evidence",
+            "references": "input/references",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-report.json",

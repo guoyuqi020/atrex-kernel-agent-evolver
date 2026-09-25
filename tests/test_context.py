@@ -24,6 +24,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
         "input/evidence/journal/directions",
         "input/evidence/journal/experiments",
         "input/evidence/review",
+        "input/references",
         "input/evolution-reports",
         "candidate",
         "candidate/skills",
@@ -54,7 +55,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
     ):
         (workspace / "input/evidence/review" / name).write_text("{}")
     manifest = {
-        "schema_version": 11,
+        "schema_version": 12,
         "parent_revision_id": REVISION,
         "evidence_checkpoint": DIGEST,
         "idempotency_key": "epoch:test:challenger",
@@ -77,9 +78,11 @@ def _environment(tmp_path: Path) -> dict[str, str]:
                 "created_by": "bootstrap",
             }
         ],
+        "references": [],
         "paths": {
             "agents": "input/agents",
             "evidence": "input/evidence",
+            "references": "input/references",
             "candidate": "candidate",
             "scratch": "scratch",
             "output": "scratch/evolution-report.json",
@@ -104,7 +107,7 @@ def test_context_loads_exact_runtime_protocol(tmp_path: Path) -> None:
     assert context.candidate_root.name == "candidate"
     assert context.visible_agents[0].resources_path == ("input/evidence/agent-v0/resources")
     assert context.visible_agents[0].runtime_state_trajectory_ordinals == ()
-    assert context.observer is None
+    assert context.references == ()
     assert context.next_optimizer_contract_root is None
 
 
@@ -120,31 +123,35 @@ def test_context_loads_next_optimizer_session_contract(tmp_path: Path) -> None:
     assert context.next_optimizer_contract_root == contract.resolve()
 
 
-def test_context_loads_independent_active_lineage_observer(tmp_path: Path) -> None:
+def test_context_loads_named_independent_control_reference(tmp_path: Path) -> None:
     environment = _environment(tmp_path)
     workspace = Path(environment["ATREX_EVOLUTION_WORKSPACE"])
     for relative in (
-        "input/observer/active/agents/agent-v0/source",
-        "input/observer/active/evidence/agent-v0/resources/trajectories",
+        "input/references/control/agents/agent-v0/source",
+        "input/references/control/evidence/agent-v0/resources/trajectories",
     ):
         (workspace / relative).mkdir(parents=True)
-    (workspace / "input/observer/active/evidence/agent-v0/optimization-summary.json").write_text(
+    (workspace / "input/references/control/evidence/agent-v0/optimization-summary.json").write_text(
         "{}"
     )
     manifest = json.loads(environment["ATREX_EVOLUTION_INPUT_JSON"])
-    manifest["observer"] = {
-        "lineage_id": "lineage_0123456789abcdef0123456789abcdef",
-        "relationship": "independent_active_lineage",
-        "evidence_checkpoint": DIGEST,
-        "path": "input/observer/active",
-    }
+    manifest["references"] = [
+        {
+            "name": "control",
+            "lineage_id": "lineage_0123456789abcdef0123456789abcdef",
+            "relationship": "independent_control_lineage",
+            "evidence_checkpoint": DIGEST,
+            "path": "input/references/control",
+        }
+    ]
     environment["ATREX_EVOLUTION_INPUT_JSON"] = json.dumps(manifest)
 
     context = EvolutionContext.load(environment)
 
-    assert context.observer is not None
-    assert context.observer.lineage_id == "lineage_0123456789abcdef0123456789abcdef"
-    assert context.observer.path == "input/observer/active"
+    assert len(context.references) == 1
+    assert context.references[0].name == "control"
+    assert context.references[0].lineage_id == "lineage_0123456789abcdef0123456789abcdef"
+    assert context.references[0].path == "input/references/control"
 
 
 def test_context_derives_next_evolution_number_from_reports(tmp_path: Path) -> None:

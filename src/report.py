@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import stat
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -82,9 +83,10 @@ def _contributing_paths(value: object) -> list[str]:
             and parts[2][7:].isdigit()
             and (parts[1] != "evidence" or (len(parts) >= 4 and parts[3] == "resources"))
         )
-        observer_source = (
+        reference_source = (
             len(parts) >= 6
-            and parts[:3] == ("input", "observer", "active")
+            and parts[:2] == ("input", "references")
+            and re.fullmatch(r"[a-z][a-z0-9-]{0,63}", parts[2]) is not None
             and parts[3] in {"agents", "evidence"}
             and parts[4].startswith("agent-v")
             and parts[4][7:].isdigit()
@@ -98,12 +100,12 @@ def _contributing_paths(value: object) -> list[str]:
             or ".." in parts
             or "\\" in item
             or "\x00" in item
-            or not (standard_source or observer_source)
+            or not (standard_source or reference_source)
         ):
             raise ValueError(
                 f"{label} must be canonical and under input/agents/agent-vN "
-                "or input/evidence/agent-vN/resources, or under the same Source/Resources "
-                "paths in input/observer/active"
+                "or input/evidence/agent-vN/resources, or under a manifest-declared "
+                "input/references/NAME Source/Resources path"
             )
         paths.append(item)
     if paths != sorted(set(paths)):
@@ -115,12 +117,38 @@ def validate_contribution_sources(
     workspace: Path,
     paths: list[str],
     visible_agents: list[dict[str, Any]],
+    references: list[dict[str, Any]],
 ) -> None:
     """Validate actual referenced files independently of the claimed base."""
     for index, relative in enumerate(paths):
         label = f"contributing_paths[{index}]"
         path = PurePosixPath(relative)
-        if path.is_relative_to(PurePosixPath("input/observer/active")):
+        reference = next(
+            (
+                item
+                for item in references
+                if path.is_relative_to(PurePosixPath(str(item.get("path", ""))))
+            ),
+            None,
+        )
+        if reference is not None:
+            root = PurePosixPath(str(reference["path"]))
+            relative_parts = path.relative_to(root).parts
+            eligible = (
+                len(relative_parts) >= 3
+                and relative_parts[0] in {"agents", "evidence"}
+                and relative_parts[1].startswith("agent-v")
+                and relative_parts[1][7:].isdigit()
+                and (
+                    (relative_parts[0] == "agents" and relative_parts[2] == "source")
+                    or (
+                        relative_parts[0] == "evidence"
+                        and relative_parts[2] == "resources"
+                    )
+                )
+            )
+            if not eligible:
+                raise ValueError(f"{label} is outside eligible reference Source/Resources")
             current = workspace
             try:
                 for part in path.parts:
